@@ -132,7 +132,17 @@ For production multi-user deployment:
    # Grant permissions
    ```
 
-4. **Monitor logs**
+4. **How it works**
+   - OCRBox automatically creates required folders on first run:
+     - `/ocr_output/` - For extracted text files
+     - `/processed/` - For processed images
+     - `README.txt` - Usage instructions
+   - Upload images or screenshots to your App Folder root
+   - OCRBox processes them automatically (every 30 seconds)
+   - Extracted text appears in `/ocr_output/`
+   - Processed images move to `/processed/`
+
+5. **Monitor logs**
    ```bash
    docker-compose logs -f
    ```

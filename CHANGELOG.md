@@ -5,6 +5,21 @@ All notable changes to OCRBox will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Automatic folder structure initialization in Dropbox App Folder
+- Creates `/ocr_output/` and `/processed/` folders on first poll
+- Creates helpful `README.txt` in App Folder with usage instructions
+- Filters out files in `/processed/` and `/ocr_output/` from processing queue
+
+### Changed
+- **Dropbox workflow now uploads results back to Dropbox**:
+  - Extracted text files uploaded to `/ocr_output/` folder
+  - Processed images moved to `/processed/` folder (instead of just marking in DB)
+  - Original files no longer accumulate in root folder
+- Supports generic image types beyond just screenshots (photos, scans, etc.)
+
 ## [1.0.0] - 2025-10-27
 
 ### Added

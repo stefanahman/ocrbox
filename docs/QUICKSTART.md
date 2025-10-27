@@ -121,17 +121,29 @@ The service will automatically restart in watcher mode.
    Apps → OCRBox-YourName
    ```
 
-2. Upload an image (screenshot, photo, etc.)
+2. You'll see OCRBox has created:
+   - `/ocr_output/` - Extracted text files appear here
+   - `/processed/` - Processed images move here
+   - `README.txt` - Usage instructions
 
-3. Watch the logs:
+3. Upload an image or screenshot to the **root folder** (not in subfolders)
+
+4. Watch the logs:
    ```bash
    docker-compose logs -f
    ```
-
-4. Check output:
-   ```bash
-   ls data/output/
+   
+   You'll see:
    ```
+   Found 1 new file(s) for your@email.com
+   Processing file: screenshot.png
+   Uploaded text file to Dropbox: /ocr_output/screenshot.txt
+   Moved processed image to: /processed/screenshot.png
+   ```
+
+5. Check results in Dropbox:
+   - Text file in `/ocr_output/screenshot.txt`
+   - Original moved to `/processed/screenshot.png`
 
 **Done!** Your Dropbox OCR service is live. 📸→📝
 
