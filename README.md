@@ -201,6 +201,41 @@ ALLOWED_ACCOUNTS=dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc,user@example.com
 - Tokens stored securely with restrictive permissions (600)
 - OAuth uses PKCE for enhanced security
 
+### Adding Additional Users
+
+To allow multiple users to authorize after the first user:
+
+1. **Enable multi-user mode** in `.env`:
+   ```env
+   OAUTH_ALWAYS_ENABLED=true
+   ```
+
+2. **Add their email to allowlist**:
+   ```env
+   ALLOWED_ACCOUNTS=your@email.com,girlfriend@email.com,friend@email.com
+   ```
+
+3. **Update Dropbox redirect URI** for network access (optional):
+   ```env
+   DROPBOX_REDIRECT_URI=http://YOUR_LOCAL_IP:8080/oauth/callback
+   ```
+   
+   Get your local IP: `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux)
+
+4. **Restart the service**:
+   ```bash
+   docker-compose restart
+   ```
+
+5. **Share authorization URL** with new users:
+   ```
+   http://YOUR_LOCAL_IP:8080  (same network)
+   or
+   http://localhost:8080  (same computer)
+   ```
+
+The OAuth server now runs continuously alongside the file watcher, allowing new users to authorize at any time!
+
 ### Token Management
 
 Tokens are stored as JSON files in `data/tokens/`:

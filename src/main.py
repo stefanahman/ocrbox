@@ -3,6 +3,7 @@
 import logging
 import signal
 import sys
+import threading
 from typing import Optional
 
 from .config import Config
@@ -128,6 +129,29 @@ class OCRBoxService:
         
         self.watcher.run()
     
+    def run_oauth_server_thread(self, oauth_manager):
+        """Run OAuth server in a separate thread."""
+        from http.server import HTTPServer
+        from .dropbox_oauth import OAuthCallbackHandler
+        
+        # Set up callback handler
+        OAuthCallbackHandler.oauth_manager = oauth_manager
+        
+        # Create server
+        server = HTTPServer(
+            (self.config.oauth_server_host, self.config.oauth_server_port),
+            OAuthCallbackHandler
+        )
+        
+        logger.info(f"OAuth server running at http://{self.config.oauth_server_host}:{self.config.oauth_server_port}")
+        logger.info(f"Visit http://localhost:{self.config.oauth_server_port} to authorize additional users")
+        
+        # Run server
+        try:
+            server.serve_forever()
+        except Exception as e:
+            logger.error(f"OAuth server error: {e}")
+    
     def run_dropbox_mode(self):
         """Run in Dropbox mode."""
         logger.info("=" * 60)
@@ -181,7 +205,6 @@ class OCRBoxService:
             
             logger.info("")
             logger.info(f"✓ Successfully authorized {len(accounts)} account(s)")
-            logger.info("Restarting in watcher mode...")
             logger.info("")
         
         # Display authorized accounts
@@ -196,6 +219,17 @@ class OCRBoxService:
         logger.info(f"Archive directory: {self.config.archive_dir}")
         logger.info(f"Poll interval: {self.config.poll_interval}s")
         logger.info("")
+        
+        # Start OAuth server in background if always enabled (for multi-user)
+        if self.config.oauth_always_enabled:
+            logger.info("🔓 Multi-user mode enabled - OAuth server will stay running")
+            oauth_thread = threading.Thread(
+                target=self.run_oauth_server_thread,
+                args=(oauth_manager,),
+                daemon=True
+            )
+            oauth_thread.start()
+            logger.info("")
         
         # Create and run Dropbox watcher
         self.watcher = DropboxWatcher(

@@ -24,7 +24,7 @@ wheels/
 *.egg
 
 # Environment
-.env
+.env*
 .env.local
 
 # Data directory (local development)

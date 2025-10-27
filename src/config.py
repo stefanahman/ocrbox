@@ -47,6 +47,7 @@ class Config:
     # OAuth Server
     oauth_server_port: int
     oauth_server_host: str
+    oauth_always_enabled: bool
     
     # Paths
     data_dir: str
@@ -141,6 +142,7 @@ class Config:
         # OAuth server
         oauth_server_port = int(os.getenv("OAUTH_SERVER_PORT", "8080"))
         oauth_server_host = os.getenv("OAUTH_SERVER_HOST", "0.0.0.0")
+        oauth_always_enabled = os.getenv("OAUTH_ALWAYS_ENABLED", "false").lower() == "true"
         
         # Paths
         data_dir = os.getenv("DATA_DIR", "/app/data")
@@ -175,6 +177,7 @@ class Config:
             retry_delay=retry_delay,
             oauth_server_port=oauth_server_port,
             oauth_server_host=oauth_server_host,
+            oauth_always_enabled=oauth_always_enabled,
             data_dir=data_dir,
             tokens_dir=tokens_dir,
             output_dir=output_dir,
