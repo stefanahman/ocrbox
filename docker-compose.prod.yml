@@ -1,6 +1,6 @@
 services:
   ocrbox:
-    build: .
+    image: ghcr.io/${GITHUB_REPOSITORY:-stefanahman/ocrbox}:latest
     container_name: ocrbox
     restart: unless-stopped
     env_file:
@@ -14,4 +14,5 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    pull_policy: always
 

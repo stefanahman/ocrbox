@@ -6,7 +6,7 @@ OCRBox automatically extracts text from screenshots and images through Dropbox i
 
 ## ✨ Features
 
-- **🤖 Advanced OCR**: Powered by Google Gemini (1.5-flash or 1.5-pro)
+- **🤖 Advanced OCR**: Powered by Google Gemini (2.5-flash-lite or 2.0-flash-exp)
 - **☁️ Dropbox Integration**: App Folder support with multi-tenant access control
 - **🔒 Secure Authorization**: OAuth 2.0 with allowlist validation
 - **💻 Development Mode**: Local folder watching for testing
@@ -59,7 +59,7 @@ OCRBox automatically extracts text from screenshots and images through Dropbox i
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/ocrbox.git
+   git clone https://github.com/stefanahman/ocrbox.git
    cd ocrbox
    ```
 
@@ -73,12 +73,12 @@ OCRBox automatically extracts text from screenshots and images through Dropbox i
    # Required
    GEMINI_API_KEY=your_gemini_api_key
    MODE=local  # or 'dropbox'
-   
+
    # For Dropbox mode
    DROPBOX_APP_KEY=your_app_key
    DROPBOX_APP_SECRET=your_app_secret
    ALLOWED_ACCOUNTS=user@example.com
-   
+
    # For notifications
    TELEGRAM_ENABLED=true
    TELEGRAM_BOT_TOKEN=your_bot_token
@@ -126,7 +126,7 @@ For production multi-user deployment:
 3. **Start and authorize**
    ```bash
    docker-compose up
-   
+
    # Visit http://localhost:8080
    # Click "Authorize with Dropbox"
    # Grant permissions
@@ -155,7 +155,7 @@ For production multi-user deployment:
 |----------|-------------|---------|----------|
 | `MODE` | Operation mode (`local` or `dropbox`) | `local` | Yes |
 | `GEMINI_API_KEY` | Google Gemini API key | - | Yes |
-| `GEMINI_MODEL` | Gemini model to use | `gemini-1.5-flash` | No |
+| `GEMINI_MODEL` | Gemini model to use | `gemini-2.5-flash-lite` | No |
 | `LOG_LEVEL` | Logging verbosity | `INFO` | No |
 
 ### Dropbox Configuration
@@ -219,7 +219,7 @@ To allow multiple users to authorize after the first user:
    ```env
    DROPBOX_REDIRECT_URI=http://YOUR_LOCAL_IP:8080/oauth/callback
    ```
-   
+
    Get your local IP: `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux)
 
 4. **Restart the service**:
@@ -298,6 +298,32 @@ For Gmail:
    EMAIL_TO=recipient@example.com
    ```
 
+## 🚀 Production Deployment
+
+For deploying OCRBox on your own server with systemd, see the comprehensive [Deployment Guide](docs/DEPLOYMENT.md).
+
+### Quick Setup with SSH Tunnel (Private Server)
+
+Deploy on your server without exposing it publicly:
+
+```bash
+# On your server
+git clone https://github.com/stefanahman/ocrbox.git /opt/ocrbox
+cd /opt/ocrbox
+sudo ./deployment/install.sh
+```
+
+For Dropbox OAuth authorization (keeps server private):
+```bash
+# From your local machine
+ssh -L 8080:localhost:8080 user@yourserver.com
+
+# Then visit http://localhost:8080 in your browser
+# Complete OAuth flow, then disconnect tunnel
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
+
 ## 🔧 Maintenance
 
 ### View Logs
@@ -357,7 +383,7 @@ docker-compose up -d
 
 ### Notifications not sending
 
-**Solution**: 
+**Solution**:
 - Verify credentials in `.env`
 - Check `docker-compose logs` for error messages
 - Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`
@@ -402,8 +428,8 @@ MIT License - see LICENSE file for details
 ## 💬 Support
 
 - 📖 [Documentation](docs/)
-- 🐛 [Issue Tracker](https://github.com/yourusername/ocrbox/issues)
-- 💡 [Discussions](https://github.com/yourusername/ocrbox/discussions)
+- 🐛 [Issue Tracker](https://github.com/stefanahman/ocrbox/issues)
+- 💡 [Discussions](https://github.com/stefanahman/ocrbox/discussions)
 
 ---
 

@@ -132,7 +132,7 @@ The service will automatically restart in watcher mode.
    ```bash
    docker-compose logs -f
    ```
-   
+
    You'll see:
    ```
    Found 1 new file(s) for your@email.com
@@ -257,8 +257,8 @@ print('API key works!')
 
 ## Support
 
-- 🐛 [Report Issues](https://github.com/yourusername/ocrbox/issues)
-- 💬 [Ask Questions](https://github.com/yourusername/ocrbox/discussions)
+- 🐛 [Report Issues](https://github.com/stefanahman/ocrbox/issues)
+- 💬 [Ask Questions](https://github.com/stefanahman/ocrbox/discussions)
 - 📧 Contact: your-email@example.com
 
 ---
