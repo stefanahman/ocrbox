@@ -40,7 +40,7 @@ See [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for complete reference.
   - Tags images with `latest` and commit SHA
 
 ### 5. Systemd Deployment
-- ✅ Created `deployment/ocrbox.service` - systemd service file
+- ✅ Created `deployment/ocrbox@.service` - systemd service template file
 - ✅ Created `deployment/install.sh` - automated installation script
 - ✅ Created `deployment/README.md` - quick reference guide
 
@@ -130,7 +130,7 @@ ssh -L 8080:localhost:8080 user@yourserver.com
 - `docker-compose.prod.yml`
 
 ### Deployment
-- `deployment/ocrbox.service`
+- `deployment/ocrbox@.service`
 - `deployment/install.sh` (executable)
 - `deployment/README.md`
 

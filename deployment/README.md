@@ -101,7 +101,7 @@ http://localhost:8080/oauth/callback
   - `output/` - Processed text files
   - `archive/` - Processed images
 - **Logs**: `journalctl -u ocrbox@username`
-- **Service**: `/etc/systemd/system/ocrbox.service`
+- **Service**: `/etc/systemd/system/ocrbox@.service`
 
 ## Troubleshooting
 
@@ -177,7 +177,7 @@ sudo systemctl stop ocrbox@username
 sudo systemctl disable ocrbox@username
 
 # Remove service file
-sudo rm /etc/systemd/system/ocrbox.service
+sudo rm /etc/systemd/system/ocrbox@.service
 sudo systemctl daemon-reload
 
 # Remove installation (optional, backs up data first)

@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 # Configuration
 INSTALL_DIR="/opt/ocrbox"
 SERVICE_NAME="ocrbox@${SUDO_USER}"
-SERVICE_FILE="ocrbox.service"
+SERVICE_FILE="ocrbox@.service"
 
 echo "================================================"
 echo "OCRBox Systemd Installation Script"

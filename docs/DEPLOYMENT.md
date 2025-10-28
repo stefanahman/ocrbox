@@ -680,7 +680,7 @@ Run multiple OCRBox instances for different users:
 
 1. Clone directory: `cp -r /opt/ocrbox /opt/ocrbox-user2`
 2. Update `.env` with different port
-3. Create new service: `cp /etc/systemd/system/ocrbox.service /etc/systemd/system/ocrbox-user2.service`
+3. Create new service: `cp /etc/systemd/system/ocrbox@.service /etc/systemd/system/ocrbox-user2@.service`
 4. Update service file paths
 5. Enable and start
 
