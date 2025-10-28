@@ -42,13 +42,22 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker compose &> /dev/null; then
+# Check for Docker Compose (both old and new versions)
+DOCKER_COMPOSE_CMD=""
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+    DOCKER_COMPOSE_PATH=$(which docker-compose)
+elif docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+    DOCKER_COMPOSE_PATH="/usr/bin/docker"
+else
     echo -e "${RED}Error: Docker Compose is not installed${NC}"
     echo "Please install Docker Compose first"
     exit 1
 fi
 
 echo -e "${GREEN}✓ Docker and Docker Compose are installed${NC}"
+echo "  Using: $DOCKER_COMPOSE_CMD at $DOCKER_COMPOSE_PATH"
 echo ""
 
 # Create installation directory if it doesn't exist
@@ -116,7 +125,7 @@ fi
 # Pull latest Docker image
 echo "Pulling latest Docker image..."
 cd "$INSTALL_DIR"
-if sudo -u "$SUDO_USER" docker compose -f docker-compose.prod.yml pull 2>/dev/null; then
+if sudo -u "$SUDO_USER" $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml pull 2>/dev/null; then
     echo -e "${GREEN}✓ Docker image pulled${NC}"
 else
     echo -e "${YELLOW}Warning: Could not pull image. Will use local build if available.${NC}"
@@ -126,7 +135,18 @@ echo ""
 
 # Install systemd service
 echo "Installing systemd service..."
-cp "$INSTALL_DIR/deployment/$SERVICE_FILE" "/etc/systemd/system/"
+
+# Update service file with correct docker-compose path
+if [ "$DOCKER_COMPOSE_CMD" = "docker-compose" ]; then
+    # Use standalone docker-compose
+    sed "s|/usr/local/bin/docker-compose|$DOCKER_COMPOSE_PATH|g" \
+        "$INSTALL_DIR/deployment/$SERVICE_FILE" > "/etc/systemd/system/$SERVICE_FILE"
+else
+    # Use docker compose plugin
+    sed -e "s|/usr/local/bin/docker-compose -f|/usr/bin/docker compose -f|g" \
+        "$INSTALL_DIR/deployment/$SERVICE_FILE" > "/etc/systemd/system/$SERVICE_FILE"
+fi
+
 echo -e "${GREEN}✓ Service file installed${NC}"
 echo ""
 

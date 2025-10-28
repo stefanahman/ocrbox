@@ -11,10 +11,10 @@ Group=%i
 WorkingDirectory=/opt/ocrbox
 
 # Start the service
-ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up
+ExecStart=/usr/local/bin/docker-compose -f docker-compose.prod.yml up
 
 # Stop the service
-ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+ExecStop=/usr/local/bin/docker-compose -f docker-compose.prod.yml down
 
 # Restart policy
 Restart=always
