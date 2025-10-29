@@ -34,31 +34,49 @@ class ImageFileHandler(FileSystemEventHandler):
         if event.is_directory:
             return
 
-        file_path = event.src_path
+        file_path = Path(event.src_path)
 
         # Check if it's an image file
-        if not self.file_processor.is_image_file(file_path):
+        if not self.file_processor.is_image_file(str(file_path)):
             return
 
         # Avoid duplicate processing
-        if file_path in self.processing:
+        if str(file_path) in self.processing:
             return
 
-        self.processing.add(file_path)
+        self.processing.add(str(file_path))
 
         try:
             # Wait a bit to ensure file is fully written
             time.sleep(0.5)
 
             # Process the file
-            logger.info(f"New file detected: {Path(file_path).name}")
-            self.file_processor.process_file(file_path)
+            logger.info(f"New file detected: {file_path.name}")
+
+            # Read file data
+            with open(file_path, 'rb') as f:
+                image_data = f.read()
+
+            # Use unique UUID for each processing to allow re-processing
+            unique_id = f"local:{uuid.uuid4()}"
+
+            success, _, _ = self.file_processor.process_bytes(
+                image_data=image_data,
+                filename=file_path.name,
+                file_identifier=unique_id,
+                account_id="local",
+                account_email="local"
+            )
+
+            if success:
+                # Remove original file after successful processing
+                file_path.unlink()
 
         except Exception as e:
-            logger.error(f"Error handling new file {file_path}: {e}")
+            logger.error(f"Error handling new file {file_path.name}: {e}")
 
         finally:
-            self.processing.discard(file_path)
+            self.processing.discard(str(file_path))
 
 
 class LocalFolderWatcher:
