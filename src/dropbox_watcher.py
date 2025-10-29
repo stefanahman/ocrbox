@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class DropboxWatcher:
     """Watches Dropbox App Folders for new files."""
-    
+
     def __init__(
         self,
         token_storage: TokenStorage,
@@ -26,7 +26,7 @@ class DropboxWatcher:
         poll_interval: int = 30,
     ):
         """Initialize Dropbox watcher.
-        
+
         Args:
             token_storage: Token storage instance
             file_processor: File processor instance
@@ -37,39 +37,39 @@ class DropboxWatcher:
         self.file_processor = file_processor
         self.oauth_manager = oauth_manager
         self.poll_interval = poll_interval
-        
+
         # Track cursors for each account (for delta sync)
         self.cursors: Dict[str, Optional[str]] = {}
-        
+
         # Track initialized accounts (to avoid re-creating folders)
         self.initialized_accounts = set()
-        
+
         logger.info("Initialized Dropbox watcher")
-    
+
     def get_dropbox_client(self, account_id: str) -> Optional[dropbox.Dropbox]:
         """Get authenticated Dropbox client for an account.
-        
+
         Args:
             account_id: Dropbox account ID
-            
+
         Returns:
             Dropbox client or None if token invalid
         """
         token_data = self.token_storage.load_token(account_id)
-        
+
         if not token_data:
             logger.error(f"No token found for account: {account_id}")
             return None
-        
+
         try:
             dbx = dropbox.Dropbox(token_data["access_token"])
             # Test the connection
             dbx.users_get_current_account()
             return dbx
-            
+
         except AuthError as e:
             logger.warning(f"Token expired for account {account_id}, attempting refresh...")
-            
+
             # Try to refresh token
             if self.oauth_manager.refresh_token(account_id):
                 # Try again with refreshed token
@@ -79,39 +79,39 @@ class DropboxWatcher:
             else:
                 logger.error(f"Failed to refresh token for account: {account_id}")
                 return None
-        
+
         except Exception as e:
             logger.error(f"Error creating Dropbox client for {account_id}: {e}")
             return None
-    
+
     def list_new_files(self, account_id: str) -> List[FileMetadata]:
         """List new files in the App Folder for an account.
-        
+
         Args:
             account_id: Dropbox account ID
-            
+
         Returns:
             List of new file metadata
         """
         dbx = self.get_dropbox_client(account_id)
-        
+
         if not dbx:
             return []
-        
+
         try:
             new_files = []
             cursor = self.cursors.get(account_id)
-            
+
             if cursor:
                 # Get changes since last check
                 result = dbx.files_list_folder_continue(cursor)
             else:
                 # First time - list all files
                 result = dbx.files_list_folder("", recursive=True)
-            
+
             # Update cursor for next time
             self.cursors[account_id] = result.cursor
-            
+
             # Collect new image files (v2: only from /Inbox/)
             for entry in result.entries:
                 if isinstance(entry, FileMetadata):
@@ -120,12 +120,12 @@ class DropboxWatcher:
                         continue
                     if self.file_processor.is_image_file(entry.path_lower):
                         new_files.append(entry)
-            
+
             # Handle pagination
             while result.has_more:
                 result = dbx.files_list_folder_continue(result.cursor)
                 self.cursors[account_id] = result.cursor
-                
+
                 for entry in result.entries:
                     if isinstance(entry, FileMetadata):
                         # Only process files in /Inbox/
@@ -133,17 +133,17 @@ class DropboxWatcher:
                             continue
                         if self.file_processor.is_image_file(entry.path_lower):
                             new_files.append(entry)
-            
+
             return new_files
-            
+
         except ApiError as e:
             logger.error(f"Dropbox API error for account {account_id}: {e}")
             return []
-        
+
         except Exception as e:
             logger.error(f"Error listing files for account {account_id}: {e}")
             return []
-    
+
     def download_and_process_file(
         self,
         account_id: str,
@@ -151,29 +151,31 @@ class DropboxWatcher:
         file_metadata: FileMetadata
     ) -> bool:
         """Download and process a file from Dropbox.
-        
+
         Args:
             account_id: Dropbox account ID
             account_email: User's email
             file_metadata: File metadata from Dropbox
-            
+
         Returns:
             True if processed successfully
         """
         dbx = self.get_dropbox_client(account_id)
-        
+
         if not dbx:
             return False
-        
+
         try:
             # Download file
             logger.info(f"Downloading file from Dropbox: {file_metadata.name}")
             metadata, response = dbx.files_download(file_metadata.path_lower)
             image_data = response.content
-            
-            # Create unique identifier for idempotency
-            file_identifier = f"dropbox:{account_id}:{file_metadata.id}"
-            
+
+            # Create unique identifier for idempotency using filename + creation time
+            # This allows re-processing files by copying them back (new timestamp)
+            created_time = file_metadata.server_modified.isoformat()
+            file_identifier = f"dropbox:{account_id}:{file_metadata.name}:{created_time}"
+
             # Process file
             success, text, output_path = self.file_processor.process_bytes(
                 image_data=image_data,
@@ -182,24 +184,24 @@ class DropboxWatcher:
                 account_id=account_id,
                 account_email=account_email,
             )
-            
+
             if success and text:
                 # Upload the extracted text back to Dropbox
                 text_filename = os.path.basename(output_path) if output_path else "output.txt"
                 self.upload_text_to_dropbox(dbx, text_filename, text)
-                
+
                 # Upload log files to Dropbox /Logs/ folder
                 self.upload_logs_to_dropbox(dbx, file_metadata.name)
-                
+
                 # Move the processed image to /Archive/ folder
                 self.move_to_archive(dbx, file_metadata)
-            
+
             return success
-            
+
         except Exception as e:
             logger.error(f"Error downloading/processing file {file_metadata.name}: {e}")
             return False
-    
+
     def upload_text_to_dropbox(
         self,
         dbx: dropbox.Dropbox,
@@ -207,52 +209,52 @@ class DropboxWatcher:
         text_content: str
     ) -> bool:
         """Upload extracted text back to Dropbox App Folder (v2: /Outbox/).
-        
+
         Args:
             dbx: Dropbox client
             filename: Output filename
             text_content: Extracted text
-            
+
         Returns:
             True if uploaded successfully
         """
         try:
             # Upload to /Outbox/ folder in App Folder
             output_path = f"/Outbox/{filename}"
-            
+
             dbx.files_upload(
                 text_content.encode("utf-8"),
                 output_path,
                 mode=dropbox.files.WriteMode.overwrite,
             )
-            
+
             logger.info(f"Uploaded text file to Dropbox: {output_path}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error uploading text to Dropbox: {e}")
             return False
-    
+
     def upload_logs_to_dropbox(
         self,
         dbx: dropbox.Dropbox,
         input_filename: str
     ) -> bool:
         """Upload log files for a processed file to Dropbox /Logs/ folder.
-        
+
         Args:
             dbx: Dropbox client
             input_filename: Original input file name (to find corresponding logs)
-            
+
         Returns:
             True if at least one log was uploaded successfully
         """
         try:
             from pathlib import Path
-            
+
             # Get the base name without extension for log matching
             base_name = Path(input_filename).stem
-            
+
             # Find all log files for this input file
             logs_dir = Path(self.file_processor.log_writer.logs_dir)
             log_patterns = [
@@ -260,17 +262,17 @@ class DropboxWatcher:
                 f"{base_name}_processing.json",
                 f"{base_name}_error.json"
             ]
-            
+
             uploaded_count = 0
             for log_filename in log_patterns:
                 log_path = logs_dir / log_filename
-                
+
                 if log_path.exists():
                     try:
                         # Read log file
                         with open(log_path, 'r', encoding='utf-8') as f:
                             log_content = f.read()
-                        
+
                         # Upload to Dropbox /Logs/ folder
                         dropbox_path = f"/Logs/{log_filename}"
                         dbx.files_upload(
@@ -278,87 +280,87 @@ class DropboxWatcher:
                             dropbox_path,
                             mode=dropbox.files.WriteMode.overwrite
                         )
-                        
+
                         logger.debug(f"Uploaded log to Dropbox: {dropbox_path}")
                         uploaded_count += 1
-                        
+
                     except Exception as e:
                         logger.warning(f"Could not upload log {log_filename}: {e}")
-            
+
             if uploaded_count > 0:
                 logger.info(f"Uploaded {uploaded_count} log file(s) to Dropbox for {input_filename}")
                 return True
             else:
                 logger.debug(f"No log files found to upload for {input_filename}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error uploading logs to Dropbox: {e}")
             return False
-    
+
     def move_to_archive(
         self,
         dbx: dropbox.Dropbox,
         file_metadata: FileMetadata
     ) -> bool:
         """Move processed image to /Archive/ folder in Dropbox (v2).
-        
+
         Args:
             dbx: Dropbox client
             file_metadata: Original file metadata
-            
+
         Returns:
             True if moved successfully
         """
         try:
             # Build destination path
             dest_path = f"/Archive/{file_metadata.name}"
-            
+
             # Move the file
             dbx.files_move_v2(
                 file_metadata.path_lower,
                 dest_path,
                 autorename=True  # Auto-rename if destination exists
             )
-            
+
             logger.info(f"Moved processed image to: {dest_path}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error moving file to processed folder: {e}")
             return False
-    
+
     def initialize_folder_structure(self, account_id: str) -> bool:
         """Initialize required folder structure in Dropbox App Folder (v2).
-        
+
         Creates:
         - /Inbox/ - For images to process
         - /Outbox/ - For extracted text files
         - /Archive/ - For processed images
         - /Logs/ - For processing logs
-        
+
         Args:
             account_id: Dropbox account ID
-            
+
         Returns:
             True if initialization successful
         """
         # Skip if already initialized
         if account_id in self.initialized_accounts:
             return True
-        
+
         dbx = self.get_dropbox_client(account_id)
-        
+
         if not dbx:
             return False
-        
+
         folders_to_create = [
             '/Inbox',
-            '/Outbox', 
+            '/Outbox',
             '/Archive',
             '/Logs'
         ]
-        
+
         try:
             for folder_path in folders_to_create:
                 try:
@@ -373,7 +375,7 @@ class DropboxWatcher:
                     else:
                         logger.warning(f"Could not create folder {folder_path}: {e}")
                         # Don't fail completely, just continue
-            
+
             # Create default tags.txt in root
             default_tags = "\n".join([
                 "receipts",
@@ -387,7 +389,7 @@ class DropboxWatcher:
                 "health",
                 "finance"
             ])
-            
+
             try:
                 # Upload tags.txt (only if doesn't exist)
                 dbx.files_upload(
@@ -402,7 +404,7 @@ class DropboxWatcher:
                     logger.warning(f"Could not create tags.txt: {e}")
                 else:
                     logger.debug("tags.txt already exists")
-            
+
             # Create a README file in the root
             readme_content = """# OCRBox v2 - Automated OCR with Smart Tagging
 
@@ -444,7 +446,7 @@ Your files are processed securely. Only image bytes are sent to Google Gemini fo
 ---
 Powered by OCRBox v2 - Self-Hosted OCR Service
 """
-            
+
             try:
                 # Upload README (only if it doesn't exist)
                 dbx.files_upload(
@@ -459,49 +461,49 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
                     logger.warning(f"Could not create README: {e}")
                 else:
                     logger.debug("README.txt already exists")
-            
+
             # Mark as initialized
             self.initialized_accounts.add(account_id)
-            
+
             token_data = self.token_storage.load_token(account_id)
             account_email = token_data.get("account_email", account_id) if token_data else account_id
             logger.info(f"✓ Initialized folder structure for: {account_email}")
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error initializing folder structure: {e}")
             return False
-    
+
     def process_account(self, account_id: str) -> int:
         """Process all new files for a single account.
-        
+
         Args:
             account_id: Dropbox account ID
-            
+
         Returns:
             Number of files processed
         """
         token_data = self.token_storage.load_token(account_id)
-        
+
         if not token_data:
             logger.warning(f"No token data for account: {account_id}")
             return 0
-        
+
         account_email = token_data.get("account_email", account_id)
-        
+
         # Initialize folder structure on first poll
         if account_id not in self.initialized_accounts:
             self.initialize_folder_structure(account_id)
-        
+
         # List new files
         new_files = self.list_new_files(account_id)
-        
+
         if not new_files:
             return 0
-        
+
         logger.info(f"Found {len(new_files)} new file(s) for {account_email}")
-        
+
         # Process each file
         processed_count = 0
         for file_metadata in new_files:
@@ -510,23 +512,23 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
                     processed_count += 1
             except Exception as e:
                 logger.error(f"Error processing file {file_metadata.name}: {e}")
-        
+
         return processed_count
-    
+
     def poll_once(self) -> int:
         """Poll all accounts once for new files.
-        
+
         Returns:
             Total number of files processed
         """
         accounts = self.token_storage.list_accounts()
-        
+
         if not accounts:
             logger.debug("No authorized accounts to poll")
             return 0
-        
+
         logger.debug(f"Polling {len(accounts)} account(s) for new files...")
-        
+
         total_processed = 0
         for account_id in accounts:
             try:
@@ -534,13 +536,13 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
                 total_processed += count
             except Exception as e:
                 logger.error(f"Error polling account {account_id}: {e}")
-        
+
         return total_processed
-    
+
     def run(self):
         """Run the watcher (blocking)."""
         logger.info(f"Started Dropbox watcher (polling every {self.poll_interval}s)")
-        
+
         # Check for authorized accounts
         accounts = self.token_storage.list_accounts()
         if not accounts:
@@ -550,12 +552,12 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
             )
         else:
             logger.info(f"Monitoring {len(accounts)} authorized account(s)")
-        
+
         try:
             while True:
                 self.poll_once()
                 time.sleep(self.poll_interval)
-                
+
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
         except Exception as e:
