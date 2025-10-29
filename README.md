@@ -167,7 +167,7 @@ For production multi-user deployment:
      - `/Logs/` - Detailed processing logs
      - `/Outbox/tags.txt` - Default tags (customize this!)
      - `README.txt` - Usage instructions
-   - Upload images to `/Inbox/` in your App Folder  
+   - Upload images to `/Inbox/` in your App Folder
    - OCRBox processes them automatically (every 30 seconds)
    - Tagged text files appear in `/Outbox/` with smart filenames
    - Original images move to `/Archive/`
@@ -227,7 +227,7 @@ For production multi-user deployment:
 | `PRIMARY_TAG_CONFIDENCE_THRESHOLD` | Min confidence for primary tag (0-100) | `80` | No |
 | `ADDITIONAL_TAG_CONFIDENCE_THRESHOLD` | Min confidence for additional tags (0-100) | `70` | No |
 | `MAX_TITLE_LENGTH` | Max characters for titles | `30` | No |
-| `MAX_TAGS_PER_FILE` | Max tags per file (1-5) | `3` | No |
+| `MAX_TAGS_PER_FILE` | Max tags per file (1-5) | `5` | No |
 | `ENABLE_DETAILED_LOGS` | Write detailed logs to /Logs/ | `true` | No |
 
 ### OAuth Server Configuration
@@ -495,7 +495,7 @@ docker-compose up -d
 
 ### Notifications not sending
 
-**Solution**: 
+**Solution**:
 - Verify credentials in `.env`
 - Check `docker-compose logs` for error messages
 - Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`

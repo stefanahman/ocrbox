@@ -166,7 +166,7 @@ class Config:
         primary_tag_confidence_threshold = int(os.getenv("PRIMARY_TAG_CONFIDENCE_THRESHOLD", "80"))
         additional_tag_confidence_threshold = int(os.getenv("ADDITIONAL_TAG_CONFIDENCE_THRESHOLD", "70"))
         max_title_length = int(os.getenv("MAX_TITLE_LENGTH", "30"))
-        max_tags_per_file = int(os.getenv("MAX_TAGS_PER_FILE", "3"))
+        max_tags_per_file = int(os.getenv("MAX_TAGS_PER_FILE", "5"))
         enable_detailed_logs = os.getenv("ENABLE_DETAILED_LOGS", "true").lower() == "true"
 
         # Paths
