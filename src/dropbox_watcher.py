@@ -1,6 +1,7 @@
 """Dropbox App Folder watcher for multi-tenant OCR processing."""
 
 import logging
+import os
 import time
 from typing import Dict, Optional, List
 import dropbox
@@ -111,11 +112,11 @@ class DropboxWatcher:
             # Update cursor for next time
             self.cursors[account_id] = result.cursor
             
-            # Collect new image files (excluding processed and output folders)
+            # Collect new image files (v2: only from /Inbox/)
             for entry in result.entries:
                 if isinstance(entry, FileMetadata):
-                    # Skip files in processed or output folders
-                    if entry.path_lower.startswith('/processed/') or entry.path_lower.startswith('/ocr_output/'):
+                    # Only process files in /Inbox/ (case-insensitive)
+                    if not entry.path_lower.startswith('/inbox/'):
                         continue
                     if self.file_processor.is_image_file(entry.path_lower):
                         new_files.append(entry)
@@ -127,8 +128,8 @@ class DropboxWatcher:
                 
                 for entry in result.entries:
                     if isinstance(entry, FileMetadata):
-                        # Skip files in processed or output folders
-                        if entry.path_lower.startswith('/processed/') or entry.path_lower.startswith('/ocr_output/'):
+                        # Only process files in /Inbox/
+                        if not entry.path_lower.startswith('/inbox/'):
                             continue
                         if self.file_processor.is_image_file(entry.path_lower):
                             new_files.append(entry)
@@ -184,12 +185,14 @@ class DropboxWatcher:
             
             if success and text:
                 # Upload the extracted text back to Dropbox
-                import os
-                text_filename = os.path.basename(output_path)
+                text_filename = os.path.basename(output_path) if output_path else "output.txt"
                 self.upload_text_to_dropbox(dbx, text_filename, text)
                 
-                # Move the processed image to /processed/ folder
-                self.move_to_processed(dbx, file_metadata)
+                # Upload log files to Dropbox /Logs/ folder
+                self.upload_logs_to_dropbox(dbx, file_metadata.name)
+                
+                # Move the processed image to /Archive/ folder
+                self.move_to_archive(dbx, file_metadata)
             
             return success
             
@@ -203,7 +206,7 @@ class DropboxWatcher:
         filename: str,
         text_content: str
     ) -> bool:
-        """Upload extracted text back to Dropbox App Folder.
+        """Upload extracted text back to Dropbox App Folder (v2: /Outbox/).
         
         Args:
             dbx: Dropbox client
@@ -214,8 +217,8 @@ class DropboxWatcher:
             True if uploaded successfully
         """
         try:
-            # Upload to /ocr_output/ subfolder in App Folder
-            output_path = f"/ocr_output/{filename}"
+            # Upload to /Outbox/ folder in App Folder
+            output_path = f"/Outbox/{filename}"
             
             dbx.files_upload(
                 text_content.encode("utf-8"),
@@ -230,12 +233,75 @@ class DropboxWatcher:
             logger.error(f"Error uploading text to Dropbox: {e}")
             return False
     
-    def move_to_processed(
+    def upload_logs_to_dropbox(
+        self,
+        dbx: dropbox.Dropbox,
+        input_filename: str
+    ) -> bool:
+        """Upload log files for a processed file to Dropbox /Logs/ folder.
+        
+        Args:
+            dbx: Dropbox client
+            input_filename: Original input file name (to find corresponding logs)
+            
+        Returns:
+            True if at least one log was uploaded successfully
+        """
+        try:
+            from pathlib import Path
+            
+            # Get the base name without extension for log matching
+            base_name = Path(input_filename).stem
+            
+            # Find all log files for this input file
+            logs_dir = Path(self.file_processor.log_writer.logs_dir)
+            log_patterns = [
+                f"{base_name}_llm_response.json",
+                f"{base_name}_processing.json",
+                f"{base_name}_error.json"
+            ]
+            
+            uploaded_count = 0
+            for log_filename in log_patterns:
+                log_path = logs_dir / log_filename
+                
+                if log_path.exists():
+                    try:
+                        # Read log file
+                        with open(log_path, 'r', encoding='utf-8') as f:
+                            log_content = f.read()
+                        
+                        # Upload to Dropbox /Logs/ folder
+                        dropbox_path = f"/Logs/{log_filename}"
+                        dbx.files_upload(
+                            log_content.encode('utf-8'),
+                            dropbox_path,
+                            mode=dropbox.files.WriteMode.overwrite
+                        )
+                        
+                        logger.debug(f"Uploaded log to Dropbox: {dropbox_path}")
+                        uploaded_count += 1
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not upload log {log_filename}: {e}")
+            
+            if uploaded_count > 0:
+                logger.info(f"Uploaded {uploaded_count} log file(s) to Dropbox for {input_filename}")
+                return True
+            else:
+                logger.debug(f"No log files found to upload for {input_filename}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error uploading logs to Dropbox: {e}")
+            return False
+    
+    def move_to_archive(
         self,
         dbx: dropbox.Dropbox,
         file_metadata: FileMetadata
     ) -> bool:
-        """Move processed image to /processed/ folder in Dropbox.
+        """Move processed image to /Archive/ folder in Dropbox (v2).
         
         Args:
             dbx: Dropbox client
@@ -246,7 +312,7 @@ class DropboxWatcher:
         """
         try:
             # Build destination path
-            dest_path = f"/processed/{file_metadata.name}"
+            dest_path = f"/Archive/{file_metadata.name}"
             
             # Move the file
             dbx.files_move_v2(
@@ -263,11 +329,13 @@ class DropboxWatcher:
             return False
     
     def initialize_folder_structure(self, account_id: str) -> bool:
-        """Initialize required folder structure in Dropbox App Folder.
+        """Initialize required folder structure in Dropbox App Folder (v2).
         
         Creates:
-        - /ocr_output/ - For extracted text files
-        - /processed/ - For processed images
+        - /Inbox/ - For images to process
+        - /Outbox/ - For extracted text files
+        - /Archive/ - For processed images
+        - /Logs/ - For processing logs
         
         Args:
             account_id: Dropbox account ID
@@ -284,7 +352,12 @@ class DropboxWatcher:
         if not dbx:
             return False
         
-        folders_to_create = ['/ocr_output', '/processed']
+        folders_to_create = [
+            '/Inbox',
+            '/Outbox', 
+            '/Archive',
+            '/Logs'
+        ]
         
         try:
             for folder_path in folders_to_create:
@@ -301,37 +374,75 @@ class DropboxWatcher:
                         logger.warning(f"Could not create folder {folder_path}: {e}")
                         # Don't fail completely, just continue
             
+            # Create default tags.txt in root
+            default_tags = "\n".join([
+                "receipts",
+                "documents",
+                "invoices",
+                "notes",
+                "screenshots",
+                "personal",
+                "work",
+                "travel",
+                "health",
+                "finance"
+            ])
+            
+            try:
+                # Upload tags.txt (only if doesn't exist)
+                dbx.files_upload(
+                    default_tags.encode('utf-8'),
+                    '/tags.txt',
+                    mode=dropbox.files.WriteMode.add,
+                )
+                logger.info("Created default tags.txt in root")
+            except ApiError as e:
+                error_str = str(e)
+                if 'conflict' not in error_str.lower():
+                    logger.warning(f"Could not create tags.txt: {e}")
+                else:
+                    logger.debug("tags.txt already exists")
+            
             # Create a README file in the root
-            readme_content = """# OCRBox - Automated OCR Processing
+            readme_content = """# OCRBox v2 - Automated OCR with Smart Tagging
 
 This is your OCRBox App Folder. Here's how it works:
 
 📁 **Folder Structure:**
-- **Root folder** - Drop your images or screenshots here for processing
-- **/ocr_output/** - Extracted text files appear here
-- **/processed/** - Original images are moved here after processing
+- **/Inbox/** - Drop your images or screenshots here for processing
+- **/Outbox/** - Extracted text files appear here with [tags]
+- **/Archive/** - Original images are moved here after processing
+- **/Logs/** - Processing logs and debug information
 
 📸 **Usage:**
-1. Upload an image (PNG, JPG, GIF, WebP, BMP, TIFF) to this folder
-2. OCRBox automatically extracts the text
-3. Find the text file in /ocr_output/
-4. Original image moves to /processed/
+1. Upload an image (PNG, JPG, GIF, WebP, BMP, TIFF) to /Inbox/
+2. OCRBox automatically extracts text and categorizes it
+3. Find the text file in /Outbox/ with format: [tag1][tag2]_title.txt
+4. Original image moves to /Archive/
+
+🏷️ **Tags:**
+- Edit /tags.txt to customize available tags
+- System learns new tags from your filenames automatically
+- Files are automatically tagged with confidence scores
+- Example filename: [receipts][shopping]_grocery-receipt.txt
 
 ⚙️ **Processing:**
-- Automatic detection of new images
+- Automatic detection of new images in /Inbox/
 - Powered by Google Gemini AI
+- Smart categorization with confidence scores
 - Typically completes in 5-10 seconds
 
 💡 **Tips:**
 - Supported formats: PNG, JPEG, GIF, WebP, BMP, TIFF
-- Files in /processed/ and /ocr_output/ are not re-processed
-- Check notifications for processing status
+- Files sorted alphabetically by primary tag
+- Search by tag name to find related files
+- Check /Logs/ for detailed processing information
 
 🔒 **Privacy:**
 Your files are processed securely. Only image bytes are sent to Google Gemini for OCR.
 
 ---
-Powered by OCRBox - Self-Hosted OCR Service
+Powered by OCRBox v2 - Self-Hosted OCR Service
 """
             
             try:

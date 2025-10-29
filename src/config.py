@@ -49,6 +49,16 @@ class Config:
     oauth_server_host: str
     oauth_always_enabled: bool
 
+    # v2 Tag Features
+    enable_tags: bool
+    enable_auto_titles: bool
+    enable_tag_learning: bool
+    primary_tag_confidence_threshold: int
+    additional_tag_confidence_threshold: int
+    max_title_length: int
+    max_tags_per_file: int
+    enable_detailed_logs: bool
+
     # Paths
     data_dir: str
     tokens_dir: str
@@ -56,6 +66,11 @@ class Config:
     archive_dir: str
     watch_dir: str
     processed_db_path: str
+
+    # v2 Paths
+    inbox_dir: str
+    outbox_dir: str
+    logs_dir: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -144,18 +159,42 @@ class Config:
         oauth_server_host = os.getenv("OAUTH_SERVER_HOST", "0.0.0.0")
         oauth_always_enabled = os.getenv("OAUTH_ALWAYS_ENABLED", "false").lower() == "true"
 
+        # v2 Tag Features
+        enable_tags = os.getenv("ENABLE_TAGS", "true").lower() == "true"
+        enable_auto_titles = os.getenv("ENABLE_AUTO_TITLES", "true").lower() == "true"
+        enable_tag_learning = os.getenv("ENABLE_TAG_LEARNING", "true").lower() == "true"
+        primary_tag_confidence_threshold = int(os.getenv("PRIMARY_TAG_CONFIDENCE_THRESHOLD", "80"))
+        additional_tag_confidence_threshold = int(os.getenv("ADDITIONAL_TAG_CONFIDENCE_THRESHOLD", "70"))
+        max_title_length = int(os.getenv("MAX_TITLE_LENGTH", "30"))
+        max_tags_per_file = int(os.getenv("MAX_TAGS_PER_FILE", "3"))
+        enable_detailed_logs = os.getenv("ENABLE_DETAILED_LOGS", "true").lower() == "true"
+
         # Paths
         data_dir = os.getenv("DATA_DIR", "/app/data")
         tokens_dir = os.path.join(data_dir, "tokens")
-        output_dir = os.path.join(data_dir, "output")
-        archive_dir = os.path.join(data_dir, "archive")
-        watch_dir = os.path.join(data_dir, "watch")
+
+        # v2 Paths (new structure)
+        inbox_dir = os.path.join(data_dir, "Inbox")
+        outbox_dir = os.path.join(data_dir, "Outbox")
+        archive_dir = os.path.join(data_dir, "Archive")
+        logs_dir = os.path.join(data_dir, "Logs")
         processed_db_path = os.path.join(data_dir, "processed.db")
+
+        # Legacy paths (for backward compatibility during migration)
+        output_dir = os.path.join(data_dir, "output")
+        watch_dir = os.path.join(data_dir, "watch")
 
         # Ensure directories exist
         os.makedirs(tokens_dir, exist_ok=True)
-        os.makedirs(output_dir, exist_ok=True)
+
+        # v2 directories
+        os.makedirs(inbox_dir, exist_ok=True)
+        os.makedirs(outbox_dir, exist_ok=True)
         os.makedirs(archive_dir, exist_ok=True)
+        os.makedirs(logs_dir, exist_ok=True)
+
+        # Legacy directories (for backward compatibility)
+        os.makedirs(output_dir, exist_ok=True)
         os.makedirs(watch_dir, exist_ok=True)
 
         return cls(
@@ -178,12 +217,23 @@ class Config:
             oauth_server_port=oauth_server_port,
             oauth_server_host=oauth_server_host,
             oauth_always_enabled=oauth_always_enabled,
+            enable_tags=enable_tags,
+            enable_auto_titles=enable_auto_titles,
+            enable_tag_learning=enable_tag_learning,
+            primary_tag_confidence_threshold=primary_tag_confidence_threshold,
+            additional_tag_confidence_threshold=additional_tag_confidence_threshold,
+            max_title_length=max_title_length,
+            max_tags_per_file=max_tags_per_file,
+            enable_detailed_logs=enable_detailed_logs,
             data_dir=data_dir,
             tokens_dir=tokens_dir,
             output_dir=output_dir,
             archive_dir=archive_dir,
             watch_dir=watch_dir,
             processed_db_path=processed_db_path,
+            inbox_dir=inbox_dir,
+            outbox_dir=outbox_dir,
+            logs_dir=logs_dir,
         )
 
     def setup_logging(self):

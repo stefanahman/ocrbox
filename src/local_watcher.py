@@ -61,34 +61,47 @@ class ImageFileHandler(FileSystemEventHandler):
 
 
 class LocalFolderWatcher:
-    """Watches local folder for new image files."""
+    """Watches local folder for new image files (v2: Inbox folder)."""
     
-    def __init__(self, watch_dir: str, file_processor: FileProcessor):
+    def __init__(self, inbox_dir: str, file_processor: FileProcessor):
         """Initialize local folder watcher.
         
         Args:
-            watch_dir: Directory to watch for new files
+            inbox_dir: Inbox directory to watch for new files (v2)
             file_processor: File processor instance
         """
-        self.watch_dir = Path(watch_dir)
+        self.inbox_dir = Path(inbox_dir)
         self.file_processor = file_processor
         self.observer = None
         
-        # Ensure watch directory exists
-        self.watch_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure inbox directory exists
+        self.inbox_dir.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"Initialized local folder watcher for: {self.watch_dir}")
+        logger.info(f"Initialized local folder watcher for: {self.inbox_dir}")
     
     def process_existing_files(self):
-        """Process any existing files in the watch directory."""
-        logger.info("Checking for existing files in watch directory...")
+        """Process any existing files in the inbox directory."""
+        logger.info("Checking for existing files in inbox directory...")
         
         processed_count = 0
-        for file_path in self.watch_dir.iterdir():
+        for file_path in self.inbox_dir.iterdir():
             if file_path.is_file() and self.file_processor.is_image_file(str(file_path)):
                 try:
-                    success, _ = self.file_processor.process_file(str(file_path))
+                    # For v2, process_bytes is used with local file reading
+                    with open(file_path, 'rb') as f:
+                        image_data = f.read()
+                    
+                    success, _, _ = self.file_processor.process_bytes(
+                        image_data=image_data,
+                        filename=file_path.name,
+                        file_identifier=f"local:{file_path.absolute()}",
+                        account_id="local",
+                        account_email="local"
+                    )
+                    
                     if success:
+                        # Remove original file after successful processing
+                        file_path.unlink()
                         processed_count += 1
                 except Exception as e:
                     logger.error(f"Error processing existing file {file_path.name}: {e}")
@@ -99,18 +112,18 @@ class LocalFolderWatcher:
             logger.info("No existing files to process")
     
     def start(self):
-        """Start watching the folder."""
+        """Start watching the inbox folder."""
         # Process existing files first
         self.process_existing_files()
         
         # Set up file system observer
         event_handler = ImageFileHandler(self.file_processor)
         self.observer = Observer()
-        self.observer.schedule(event_handler, str(self.watch_dir), recursive=False)
+        self.observer.schedule(event_handler, str(self.inbox_dir), recursive=False)
         self.observer.start()
         
-        logger.info(f"Started watching folder: {self.watch_dir}")
-        logger.info("Waiting for new image files...")
+        logger.info(f"Started watching inbox: {self.inbox_dir}")
+        logger.info("Waiting for new image files in Inbox...")
     
     def stop(self):
         """Stop watching the folder."""

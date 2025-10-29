@@ -1,15 +1,19 @@
-"""Core file processing pipeline for OCR."""
+"""Core file processing pipeline for OCRBox v2."""
 
 import logging
 import hashlib
-import shutil
+import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime
+import traceback
 
 from .gemini_client import GeminiOCRClient
 from .storage import ProcessedFilesDB
 from .notifications import NotificationManager
+from .tag_manager import TagManager
+from .filename_generator import FilenameGenerator
+from .log_writer import LogWriter
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +22,14 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", "
 
 
 class FileProcessor:
-    """Processes image files through OCR pipeline."""
+    """Processes image files through v2 OCR pipeline with tags and structured output."""
     
     def __init__(
         self,
         gemini_client: GeminiOCRClient,
         processed_db: ProcessedFilesDB,
         notification_manager: NotificationManager,
-        output_dir: str,
-        archive_dir: str,
+        config,  # Config object with all settings
     ):
         """Initialize file processor.
         
@@ -34,17 +37,30 @@ class FileProcessor:
             gemini_client: Gemini OCR client
             processed_db: Processed files database
             notification_manager: Notification manager
-            output_dir: Directory for output text files
-            archive_dir: Directory for archived image files
+            config: Config object with all settings
         """
         self.gemini_client = gemini_client
         self.processed_db = processed_db
         self.notification_manager = notification_manager
-        self.output_dir = Path(output_dir)
-        self.archive_dir = Path(archive_dir)
+        
+        # Initialize components from config
+        self.tag_manager = TagManager(outbox_dir=config.outbox_dir)
+        self.filename_generator = FilenameGenerator(
+            max_title_length=config.max_title_length,
+            max_tags=config.max_tags_per_file
+        )
+        self.log_writer = LogWriter(
+            logs_dir=config.logs_dir,
+            enabled=config.enable_detailed_logs
+        )
+        
+        self.outbox_dir = Path(config.outbox_dir)
+        self.archive_dir = Path(config.archive_dir)
+        self.primary_tag_threshold = config.primary_tag_confidence_threshold
+        self.additional_tag_threshold = config.additional_tag_confidence_threshold
         
         # Ensure directories exist
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.archive_dir.mkdir(parents=True, exist_ok=True)
     
     @staticmethod
@@ -59,139 +75,6 @@ class FileProcessor:
         """
         return Path(file_path).suffix.lower() in IMAGE_EXTENSIONS
     
-    @staticmethod
-    def compute_file_hash(file_path: str) -> str:
-        """Compute SHA256 hash of a file.
-        
-        Args:
-            file_path: Path to file
-            
-        Returns:
-            Hexadecimal hash string
-        """
-        sha256 = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                sha256.update(chunk)
-        return sha256.hexdigest()
-    
-    def process_file(
-        self,
-        file_path: str,
-        file_identifier: Optional[str] = None,
-        account_id: Optional[str] = None,
-        account_email: Optional[str] = None,
-    ) -> Tuple[bool, Optional[str]]:
-        """Process a single image file through OCR pipeline.
-        
-        Args:
-            file_path: Path to image file (local filesystem)
-            file_identifier: Unique identifier for the file (for idempotency)
-            account_id: Dropbox account ID (for multi-tenant tracking)
-            account_email: User's email (for notifications)
-            
-        Returns:
-            Tuple of (success: bool, output_path: Optional[str])
-        """
-        path = Path(file_path)
-        
-        if not path.exists():
-            logger.error(f"File not found: {file_path}")
-            return False, None
-        
-        if not self.is_image_file(file_path):
-            logger.warning(f"Skipping non-image file: {file_path}")
-            return False, None
-        
-        # Use file path as identifier if not provided
-        if file_identifier is None:
-            file_identifier = str(path.absolute())
-        
-        # Check if already processed (idempotency)
-        if self.processed_db.is_processed(file_identifier):
-            logger.info(f"File already processed, skipping: {path.name}")
-            return False, None
-        
-        logger.info(f"Processing file: {path.name}")
-        
-        try:
-            # Compute file hash for duplicate detection
-            file_hash = self.compute_file_hash(file_path)
-            
-            # Extract text using Gemini
-            extracted_text = self.gemini_client.extract_text_from_file(file_path)
-            
-            # Generate output filename
-            output_filename = path.stem + ".txt"
-            output_path = self.output_dir / output_filename
-            
-            # Handle filename conflicts
-            counter = 1
-            while output_path.exists():
-                output_filename = f"{path.stem}_{counter}.txt"
-                output_path = self.output_dir / output_filename
-                counter += 1
-            
-            # Save extracted text
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(extracted_text)
-            
-            logger.info(f"Saved extracted text to: {output_path}")
-            
-            # Archive original image
-            archive_path = self.archive_dir / path.name
-            
-            # Handle filename conflicts in archive
-            counter = 1
-            while archive_path.exists():
-                archive_path = self.archive_dir / f"{path.stem}_{counter}{path.suffix}"
-                counter += 1
-            
-            shutil.move(str(path), str(archive_path))
-            logger.info(f"Archived original image to: {archive_path}")
-            
-            # Mark as processed
-            self.processed_db.mark_processed(
-                file_path=file_identifier,
-                status="success",
-                account_id=account_id,
-                file_hash=file_hash,
-                output_path=str(output_path),
-            )
-            
-            # Send success notification
-            account_display = account_email or account_id
-            self.notification_manager.notify_success(
-                filename=path.name,
-                text_excerpt=extracted_text,
-                output_path=str(output_path),
-                account=account_display,
-            )
-            
-            return True, str(output_path)
-            
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Error processing file {path.name}: {error_msg}")
-            
-            # Mark as error
-            self.processed_db.mark_processed(
-                file_path=file_identifier,
-                status="error",
-                account_id=account_id,
-                error_message=error_msg,
-            )
-            
-            # Send error notification
-            account_display = account_email or account_id
-            self.notification_manager.notify_error(
-                filename=path.name,
-                error_message=error_msg,
-                account=account_display,
-            )
-            
-            return False, None
-    
     def process_bytes(
         self,
         image_data: bytes,
@@ -200,19 +83,21 @@ class FileProcessor:
         account_id: Optional[str] = None,
         account_email: Optional[str] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
-        """Process image data (from Dropbox or upload) through OCR pipeline.
+        """Process image data through v2 OCR pipeline with tags.
         
         Args:
             image_data: Image bytes
             filename: Original filename
-            file_identifier: Unique identifier for the file (for idempotency)
-            account_id: Dropbox account ID (for multi-tenant tracking)
-            account_email: User's email (for notifications)
+            file_identifier: Unique identifier for idempotency
+            account_id: Dropbox account ID
+            account_email: User's email
             
         Returns:
-            Tuple of (success: bool, output_text: Optional[str], output_path: Optional[str])
+            Tuple of (success, output_text, output_filename)
         """
-        # Check if already processed (idempotency)
+        start_time = time.time()
+        
+        # Check if already processed
         if self.processed_db.is_processed(file_identifier):
             logger.info(f"File already processed, skipping: {filename}")
             return False, None, None
@@ -220,69 +105,143 @@ class FileProcessor:
         logger.info(f"Processing file: {filename}")
         
         try:
-            # Compute file hash for duplicate detection
-            file_hash = hashlib.sha256(image_data).hexdigest()
+            # 1. Get available tags
+            available_tags = self.tag_manager.get_available_tags()
             
-            # Extract text using Gemini
-            extracted_text = self.gemini_client.extract_text(image_data, filename)
+            # 2. Call Gemini for structured OCR
+            structured_result = self.gemini_client.extract_text_structured(
+                image_data=image_data,
+                available_tags=available_tags,
+                filename=filename
+            )
             
-            # Generate output filename
-            base_name = Path(filename).stem
-            output_filename = base_name + ".txt"
-            output_path = self.output_dir / output_filename
+            # 3. Write LLM response log
+            self.log_writer.write_llm_response_log(
+                input_filename=filename,
+                raw_response=structured_result,
+                available_tags=available_tags
+            )
             
-            # Handle filename conflicts
-            counter = 1
-            while output_path.exists():
-                output_filename = f"{base_name}_{counter}.txt"
-                output_path = self.output_dir / output_filename
-                counter += 1
+            # Extract components
+            text = structured_result["text"]
+            title = structured_result["title"]
+            tags_data = structured_result["tags"]
             
-            # Save extracted text
+            # 4. Filter tags by confidence thresholds
+            filtered_tags = self._filter_tags_by_confidence(tags_data)
+            
+            # 5. Generate output filename
+            tag_names = [tag["name"] for tag in filtered_tags]
+            output_filename = self.filename_generator.generate_filename(
+                tags=tag_names,
+                title=title,
+                output_dir=str(self.outbox_dir)
+            )
+            
+            # 6. Save text file
+            output_path = self.outbox_dir / output_filename
             with open(output_path, "w", encoding="utf-8") as f:
-                f.write(extracted_text)
+                f.write(text)
             
-            logger.info(f"Saved extracted text to: {output_path}")
+            logger.info(f"Saved text to: {output_path}")
             
-            # Mark as processed
+            # 7. Calculate processing duration
+            duration_ms = int((time.time() - start_time) * 1000)
+            
+            # 8. Write processing log
+            confidence_scores = [tag["confidence"] for tag in filtered_tags]
+            self.log_writer.write_processing_log(
+                input_filename=filename,
+                output_filename=output_filename,
+                processing_duration_ms=duration_ms,
+                status="success",
+                selected_tags=tag_names,
+                confidence_scores=confidence_scores
+            )
+            
+            # 9. Mark as processed in database
+            file_hash = hashlib.sha256(image_data).hexdigest()
             self.processed_db.mark_processed(
                 file_path=file_identifier,
                 status="success",
                 account_id=account_id,
                 file_hash=file_hash,
-                output_path=str(output_path),
+                output_path=str(output_path)
             )
             
-            # Send success notification
-            account_display = account_email or account_id
-            self.notification_manager.notify_success(
+            # 10. Send notification
+            self.notification_manager.notify_success_v2(
                 filename=filename,
-                text_excerpt=extracted_text,
+                output_filename=output_filename,
+                tags=filtered_tags,
+                text_excerpt=text,
                 output_path=str(output_path),
-                account=account_display,
+                account=account_email or account_id
             )
             
-            return True, extracted_text, str(output_path)
+            return True, text, output_filename
             
         except Exception as e:
             error_msg = str(e)
+            stack_trace = traceback.format_exc()
             logger.error(f"Error processing file {filename}: {error_msg}")
             
-            # Mark as error
+            # Write error log
+            self.log_writer.write_error_log(
+                input_filename=filename,
+                error_type=type(e).__name__,
+                error_message=error_msg,
+                stack_trace=stack_trace
+            )
+            
+            # Mark as error in database
             self.processed_db.mark_processed(
                 file_path=file_identifier,
                 status="error",
                 account_id=account_id,
-                error_message=error_msg,
+                error_message=error_msg
             )
             
             # Send error notification
-            account_display = account_email or account_id
             self.notification_manager.notify_error(
                 filename=filename,
                 error_message=error_msg,
-                account=account_display,
+                account=account_email or account_id
             )
             
             return False, None, None
+    
+    def _filter_tags_by_confidence(self, tags_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter tags based on confidence thresholds.
+        
+        Args:
+            tags_data: List of tag dictionaries with confidence scores
+            
+        Returns:
+            Filtered list of tags meeting thresholds
+        """
+        filtered = []
+        
+        for tag in tags_data:
+            is_primary = tag.get("primary", False)
+            confidence = tag.get("confidence", 0)
+            
+            # Primary tag must meet primary threshold
+            if is_primary and confidence >= self.primary_tag_threshold:
+                filtered.append(tag)
+            # Additional tags must meet additional threshold
+            elif not is_primary and confidence >= self.additional_tag_threshold:
+                filtered.append(tag)
+            else:
+                logger.debug(
+                    f"Tag '{tag.get('name')}' filtered out: "
+                    f"confidence {confidence} below threshold"
+                )
+        
+        # Ensure at least one tag (uncategorized fallback)
+        if not filtered:
+            logger.warning("No tags met threshold, using uncategorized")
+            filtered = [{"name": "uncategorized", "confidence": 100, "primary": True}]
+        
+        return filtered
 

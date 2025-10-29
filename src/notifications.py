@@ -5,7 +5,7 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from abc import ABC, abstractmethod
 from datetime import datetime
 
@@ -143,6 +143,71 @@ class NotificationManager:
         """
         self.providers.append(provider)
         logger.info(f"Added notification provider: {provider.__class__.__name__}")
+    
+    def notify_success_v2(
+        self,
+        filename: str,
+        output_filename: str,
+        tags: List[Dict[str, Any]],
+        text_excerpt: str,
+        output_path: str,
+        account: Optional[str] = None
+    ) -> None:
+        """Send v2 success notification with tags.
+        
+        Args:
+            filename: Original image filename
+            output_filename: Generated output filename
+            tags: List of tag dictionaries with confidence
+            text_excerpt: Excerpt of extracted text
+            output_path: Path to output file
+            account: Account identifier
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Create excerpt (first 200 chars)
+        excerpt = text_excerpt[:200]
+        if len(text_excerpt) > 200:
+            excerpt += "..."
+        
+        # Build tags list
+        tags_list = []
+        for tag in tags:
+            name = tag.get("name", "unknown")
+            confidence = tag.get("confidence", 0)
+            is_primary = tag.get("primary", False)
+            
+            emoji = "⭐ primary" if is_primary else ""
+            tags_list.append(f"  • {name} ({confidence}% confidence) {emoji}")
+        
+        # Build message
+        message_parts = [
+            "✅ <b>OCR Processing Complete</b>",
+            "",
+            f"<b>File:</b> {filename}",
+            f"<b>Output:</b> {output_filename}",
+            f"<b>Time:</b> {timestamp}",
+        ]
+        
+        if account:
+            message_parts.append(f"<b>Account:</b> {account}")
+        
+        message_parts.extend([
+            "",
+            "<b>Tags:</b>",
+            *tags_list,
+            "",
+            f"<b>Characters:</b> {len(text_excerpt)}",
+            "",
+            "<b>Text Preview:</b>",
+            f"<code>{excerpt}</code>",
+        ])
+        
+        message = "\n".join(message_parts)
+        
+        # Send to all providers
+        for provider in self.providers:
+            provider.send(message)
     
     def notify_success(
         self,

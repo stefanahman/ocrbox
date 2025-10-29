@@ -1,6 +1,6 @@
-# OCRBox Quick Start Guide
+# OCRBox v2 Quick Start Guide
 
-Get OCRBox running in under 5 minutes!
+Get OCRBox v2 running in under 5 minutes with smart tagging!
 
 ## Prerequisites
 
@@ -48,24 +48,45 @@ ocrbox  | Ready to process images!
 In a new terminal, add an image:
 
 ```bash
-# Copy a screenshot or image
-cp ~/Pictures/screenshot.png data/watch/
+# Copy a screenshot or image to Inbox (v2)
+cp ~/Pictures/screenshot.png data/Inbox/
 
 # Watch the logs
 docker-compose logs -f
 ```
 
-### Step 5: Check Results
+### Step 5: Check Results (v2)
 
 ```bash
-# View extracted text
-cat data/output/screenshot.txt
+# List tagged output files
+ls data/Outbox/
+# Example output: [receipts]_grocery-bill.txt
+
+# View extracted text with tags
+cat data/Outbox/[receipts]_grocery-bill.txt
+
+# Check processing logs
+ls data/Logs/
+# llm_responses/ processing/ categories/ errors/
 
 # Original image archived here
-ls data/archive/
+ls data/Archive/
 ```
 
-**That's it!** Your local OCR service is running. 🎉
+###  Step 6: Customize Tags (Optional)
+
+```bash
+# Edit tags file
+nano data/Outbox/tags.txt
+
+# Add your own categories:
+# groceries
+# projects
+# family
+# etc.
+```
+
+**That's it!** Your local OCR v2 service is running with smart tagging! 🎉
 
 ## Dropbox Mode (Production)
 
@@ -121,29 +142,35 @@ The service will automatically restart in watcher mode.
    Apps → OCRBox-YourName
    ```
 
-2. You'll see OCRBox has created:
-   - `/ocr_output/` - Extracted text files appear here
-   - `/processed/` - Processed images move here
+2. You'll see OCRBox v2 has created:
+   - `/Inbox/` - Drop images here for processing
+   - `/Outbox/` - Tagged text files appear here
+   - `/Archive/` - Processed images move here
+   - `/Logs/` - Processing logs
+   - `/Outbox/tags.txt` - Customize your tags
    - `README.txt` - Usage instructions
 
-3. Upload an image or screenshot to the **root folder** (not in subfolders)
+3. Upload an image or screenshot to `/Inbox/`
 
 4. Watch the logs:
    ```bash
    docker-compose logs -f
    ```
-
+   
    You'll see:
    ```
    Found 1 new file(s) for your@email.com
    Processing file: screenshot.png
-   Uploaded text file to Dropbox: /ocr_output/screenshot.txt
-   Moved processed image to: /processed/screenshot.png
+   Tags: [receipts] (95%), [shopping] (82%)
+   Generated title: coffee-purchase
+   Uploaded text file to Dropbox: /Outbox/[receipts][shopping]_coffee-purchase.txt
+   Moved processed image to: /Archive/screenshot.png
    ```
 
 5. Check results in Dropbox:
-   - Text file in `/ocr_output/screenshot.txt`
-   - Original moved to `/processed/screenshot.png`
+   - Tagged text file in `/Outbox/[receipts][shopping]_coffee-purchase.txt`
+   - Original moved to `/Archive/screenshot.png`
+   - Detailed logs in `/Logs/`
 
 **Done!** Your Dropbox OCR service is live. 📸→📝
 
@@ -257,8 +284,8 @@ print('API key works!')
 
 ## Support
 
-- 🐛 [Report Issues](https://github.com/stefanahman/ocrbox/issues)
-- 💬 [Ask Questions](https://github.com/stefanahman/ocrbox/discussions)
+- 🐛 [Report Issues](https://github.com/yourusername/ocrbox/issues)
+- 💬 [Ask Questions](https://github.com/yourusername/ocrbox/discussions)
 - 📧 Contact: your-email@example.com
 
 ---
