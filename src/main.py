@@ -98,20 +98,20 @@ class OCRBoxService:
             gemini_client=gemini_client,
             processed_db=processed_db,
             notification_manager=notification_manager,
-            output_dir=self.config.output_dir,
-            archive_dir=self.config.archive_dir,
+            config=self.config
         )
         
         return gemini_client, processed_db, notification_manager, file_processor
     
     def run_local_mode(self):
-        """Run in local development mode."""
+        """Run in local development mode (v2)."""
         logger.info("=" * 60)
-        logger.info("Starting LOCAL MODE")
+        logger.info("Starting LOCAL MODE (v2)")
         logger.info("=" * 60)
-        logger.info(f"Watch directory: {self.config.watch_dir}")
-        logger.info(f"Output directory: {self.config.output_dir}")
+        logger.info(f"Inbox directory: {self.config.inbox_dir}")
+        logger.info(f"Outbox directory: {self.config.outbox_dir}")
         logger.info(f"Archive directory: {self.config.archive_dir}")
+        logger.info(f"Logs directory: {self.config.logs_dir}")
         logger.info("")
         
         # Initialize components
@@ -119,7 +119,7 @@ class OCRBoxService:
         
         # Create and run local watcher
         self.watcher = LocalFolderWatcher(
-            watch_dir=self.config.watch_dir,
+            inbox_dir=self.config.inbox_dir,
             file_processor=file_processor,
         )
         

@@ -24,8 +24,9 @@ wheels/
 *.egg
 
 # Environment
-.env*
-.env.local
+.env
+.env.*
+!.env.example
 
 # Data directory (local development)
 data/

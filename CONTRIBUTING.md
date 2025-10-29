@@ -22,7 +22,7 @@ Thank you for your interest in contributing to OCRBox! This document provides gu
 
 1. **Fork the repository**
    ```bash
-   git clone https://github.com/stefanahman/ocrbox.git
+   git clone https://github.com/yourusername/ocrbox.git
    cd ocrbox
    ```
 
@@ -40,10 +40,10 @@ Thank you for your interest in contributing to OCRBox! This document provides gu
    ```bash
    # Test local mode
    ./scripts/test-local.sh
-
+   
    # Check for linting issues
    pylint src/
-
+   
    # Run type checking
    mypy src/
    ```
@@ -73,11 +73,11 @@ Example:
 ```python
 def process_file(file_path: str, account_id: Optional[str] = None) -> Tuple[bool, Optional[str]]:
     """Process a single image file through OCR pipeline.
-
+    
     Args:
         file_path: Path to image file
         account_id: Optional Dropbox account ID
-
+        
     Returns:
         Tuple of (success, output_path)
     """
@@ -202,8 +202,8 @@ print(db.get_stats())
 
 ## 📞 Getting Help
 
-- 💬 [GitHub Discussions](https://github.com/stefanahman/ocrbox/discussions)
-- 🐛 [Issue Tracker](https://github.com/stefanahman/ocrbox/issues)
+- 💬 [GitHub Discussions](https://github.com/yourusername/ocrbox/discussions)
+- 🐛 [Issue Tracker](https://github.com/yourusername/ocrbox/issues)
 - 📖 [Documentation](docs/)
 
 ## 📜 License

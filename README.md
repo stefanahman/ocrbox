@@ -1,12 +1,13 @@
-# OCRBox 📸→📝
+# OCRBox v2 📸→📝🏷️
 
-**A lightweight, self-hosted service for automatic OCR processing using Google's Gemini API**
+**A lightweight, self-hosted service for automatic OCR processing with smart tagging using Google's Gemini API**
 
-OCRBox automatically extracts text from screenshots and images through Dropbox integration or local folder watching, providing a private and efficient way to convert images into searchable text.
+OCRBox automatically extracts text from screenshots and images through Dropbox integration or local folder watching, with intelligent categorization and descriptive filenames for easy organization.
 
 ## ✨ Features
 
-- **🤖 Advanced OCR**: Powered by Google Gemini (2.5-flash-lite or 2.0-flash-exp)
+### Core Capabilities
+- **🤖 Advanced OCR**: Powered by Google Gemini (1.5-flash or 1.5-pro)
 - **☁️ Dropbox Integration**: App Folder support with multi-tenant access control
 - **🔒 Secure Authorization**: OAuth 2.0 with allowlist validation
 - **💻 Development Mode**: Local folder watching for testing
@@ -15,35 +16,55 @@ OCRBox automatically extracts text from screenshots and images through Dropbox i
 - **🐳 Docker Ready**: Self-contained deployment with Docker Compose
 - **🔐 Privacy First**: All processing happens locally, only image bytes sent to Gemini
 
+### v2 Smart Features
+- **🏷️ Automatic Tagging**: AI-powered categorization with confidence scores
+- **📚 Hybrid Tag System**: Default tags + learned tags from your filenames
+- **📝 Smart Titles**: Auto-generated descriptive titles (5-30 chars)
+- **📂 Organized Output**: Category-first filenames like `[receipts][finance]_grocery-bill.txt`
+- **📊 Detailed Logging**: 4 types of logs (LLM responses, processing, categories, errors)
+- **🎓 Tag Learning**: System learns new tags from user-modified filenames
+- **⚙️ Configurable**: Adjust confidence thresholds, title length, max tags
+
 ## 🏗️ Architecture
 
 ```
-┌─────────────┐
-│   Dropbox   │  ← Users upload images to App Folder
-│ App Folder  │
-└──────┬──────┘
-       │
-       ↓
 ┌─────────────────────────────────────────┐
-│           OCRBox Service                │
+│        Dropbox App Folder               │
+│  ┌─────────┬─────────┬─────────────┐   │
+│  │ /Inbox/ │/Outbox/ │  /Archive/  │   │
+│  │ (Input) │(Tagged  │(Processed)  │   │
+│  │         │ Output) │             │   │
+│  └────┬────┴────↑────┴──────↑──────┘   │
+└───────┼─────────┼───────────┼──────────┘
+        │         │           │
+        ↓         │           │
+┌─────────────────────────────────────────┐
+│           OCRBox v2 Service             │
 │  ┌─────────────┐     ┌──────────────┐  │
 │  │   Watcher   │────→│   Gemini     │  │
-│  │  (Polling)  │     │  OCR Client  │  │
-│  └─────────────┘     └──────────────┘  │
-│         │                    │          │
-│         ↓                    ↓          │
-│  ┌─────────────┐     ┌──────────────┐  │
-│  │  Storage    │     │ Notification │  │
-│  │  (Tokens &  │     │   Manager    │  │
-│  │  Processed) │     │              │  │
-│  └─────────────┘     └──────────────┘  │
-└─────────────────────────────────────────┘
-       │
-       ↓
-┌─────────────┐
-│   Output    │  ← Extracted text files
-│  Directory  │
-└─────────────┘
+│  │  (Polling)  │     │  OCR + Tags  │  │
+│  └─────────────┘     └──────┬───────┘  │
+│         │                   │           │
+│         ↓                   ↓           │
+│  ┌──────────────────────────────────┐  │
+│  │    Tag Manager + Learning        │  │
+│  │  (tags.txt + filename analysis)  │  │
+│  └─────────────┬────────────────────┘  │
+│                ↓                        │
+│  ┌──────────────────────────────────┐  │
+│  │   Filename Generator + Logger    │  │
+│  │  ([tags]_title.txt + 4 logs)     │  │
+│  └─────────────┬────────────────────┘  │
+│                ↓                        │
+│  ┌─────────────┴─────┬──────────────┐  │
+│  │  Storage          │ Notification │  │
+│  │  (SQLite + v2)    │   Manager    │  │
+│  └───────────────────┴──────────────┘  │
+└───────────────┬────────────┬───────────┘
+                │            │
+                ↓            ↓
+         /Outbox/        /Logs/
+    Tagged text files  Processing logs
 ```
 
 ## 🚀 Quick Start
@@ -59,7 +80,7 @@ OCRBox automatically extracts text from screenshots and images through Dropbox i
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/stefanahman/ocrbox.git
+   git clone https://github.com/yourusername/ocrbox.git
    cd ocrbox
    ```
 
@@ -73,12 +94,12 @@ OCRBox automatically extracts text from screenshots and images through Dropbox i
    # Required
    GEMINI_API_KEY=your_gemini_api_key
    MODE=local  # or 'dropbox'
-
+   
    # For Dropbox mode
    DROPBOX_APP_KEY=your_app_key
    DROPBOX_APP_SECRET=your_app_secret
    ALLOWED_ACCOUNTS=user@example.com
-
+   
    # For notifications
    TELEGRAM_ENABLED=true
    TELEGRAM_BOT_TOKEN=your_bot_token
@@ -101,11 +122,18 @@ MODE=local
 # Start service
 docker-compose up
 
-# In another terminal, add images to watch folder
-cp screenshot.png data/watch/
+# In another terminal, add images to Inbox folder
+cp screenshot.png data/Inbox/
 
-# Check output
-cat data/output/screenshot.txt
+# Check output (with v2 tagged filename)
+ls data/Outbox/
+# Example: [receipts]_grocery-bill.txt
+
+cat data/Outbox/[receipts]_grocery-bill.txt
+
+# Check logs
+ls data/Logs/
+# llm_responses/ processing/ categories/ errors/
 ```
 
 ### Dropbox Mode
@@ -126,21 +154,25 @@ For production multi-user deployment:
 3. **Start and authorize**
    ```bash
    docker-compose up
-
+   
    # Visit http://localhost:8080
    # Click "Authorize with Dropbox"
    # Grant permissions
    ```
 
-4. **How it works**
-   - OCRBox automatically creates required folders on first run:
-     - `/ocr_output/` - For extracted text files
-     - `/processed/` - For processed images
+4. **How it works (v2 folder structure)**
+   - OCRBox automatically creates required folders on first authorization:
+     - `/Inbox/` - Drop images here for processing
+     - `/Outbox/` - Tagged text files with smart filenames
+     - `/Archive/` - Processed original images
+     - `/Logs/` - Detailed processing logs
+     - `/Outbox/tags.txt` - Default tags (customize this!)
      - `README.txt` - Usage instructions
-   - Upload images or screenshots to your App Folder root
+   - Upload images to `/Inbox/` in your App Folder  
    - OCRBox processes them automatically (every 30 seconds)
-   - Extracted text appears in `/ocr_output/`
-   - Processed images move to `/processed/`
+   - Tagged text files appear in `/Outbox/` with smart filenames
+   - Original images move to `/Archive/`
+   - Processing logs saved to `/Logs/`
 
 5. **Monitor logs**
    ```bash
@@ -155,7 +187,7 @@ For production multi-user deployment:
 |----------|-------------|---------|----------|
 | `MODE` | Operation mode (`local` or `dropbox`) | `local` | Yes |
 | `GEMINI_API_KEY` | Google Gemini API key | - | Yes |
-| `GEMINI_MODEL` | Gemini model to use | `gemini-2.5-flash-lite` | No |
+| `GEMINI_MODEL` | Gemini model to use | `gemini-1.5-flash` | No |
 | `LOG_LEVEL` | Logging verbosity | `INFO` | No |
 
 ### Dropbox Configuration
@@ -185,6 +217,87 @@ For production multi-user deployment:
 | `POLL_INTERVAL` | Seconds between polls | `30` | No |
 | `MAX_RETRIES` | Maximum API retry attempts | `3` | No |
 | `RETRY_DELAY` | Initial retry delay (seconds) | `2` | No |
+
+### v2 Tag Features
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `ENABLE_TAGS` | Enable automatic tagging | `true` | No |
+| `ENABLE_AUTO_TITLES` | Generate descriptive titles | `true` | No |
+| `ENABLE_TAG_LEARNING` | Learn tags from filenames | `true` | No |
+| `PRIMARY_TAG_CONFIDENCE_THRESHOLD` | Min confidence for primary tag (0-100) | `80` | No |
+| `ADDITIONAL_TAG_CONFIDENCE_THRESHOLD` | Min confidence for additional tags (0-100) | `70` | No |
+| `MAX_TITLE_LENGTH` | Max characters for titles | `30` | No |
+| `MAX_TAGS_PER_FILE` | Max tags per file (1-5) | `3` | No |
+| `ENABLE_DETAILED_LOGS` | Write detailed logs to /Logs/ | `true` | No |
+
+### OAuth Server Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `OAUTH_SERVER_PORT` | OAuth callback server port | `8080` | No |
+| `OAUTH_SERVER_HOST` | OAuth callback server host | `0.0.0.0` | No |
+| `OAUTH_ALWAYS_ENABLED` | Keep OAuth running for multi-user | `true` | No |
+
+## 🏷️ Using Tags & Categories (v2)
+
+### Default Tags
+
+OCRBox v2 creates a `tags.txt` file in `/Outbox/` with these default tags:
+- receipts
+- documents
+- invoices
+- notes
+- screenshots
+- personal
+- work
+- travel
+- health
+- finance
+
+### Customizing Tags
+
+Edit `/Outbox/tags.txt` in your Dropbox App Folder:
+
+```text
+receipts
+shopping
+bills
+contracts
+recipes
+workout
+medical
+```
+
+### Tag Learning
+
+OCRBox learns new tags from your filenames! If you rename a file to:
+```
+[groceries][shopping]_weekly-shopping.txt
+```
+
+The system will automatically add `groceries` and `shopping` to available tags.
+
+### Output Filename Format
+
+Files are named with tags first for easy sorting:
+```
+[primary-tag][tag2][tag3]_descriptive-title.txt
+```
+
+Examples:
+- `[receipts]_starbucks-coffee.txt`
+- `[receipts][shopping]_grocery-bill.txt`
+- `[work][documents]_meeting-notes.txt`
+
+### Confidence Scores
+
+The LLM assigns confidence scores (0-100) to each tag:
+- **Primary tag**: Must be ≥ 80% confidence (configurable)
+- **Additional tags**: Must be ≥ 70% confidence (configurable)
+- **Uncategorized**: Used when no tag meets threshold
+
+Check `/Logs/categories/` for detailed confidence information.
 
 ## 🔐 Security & Access Control
 
@@ -219,7 +332,7 @@ To allow multiple users to authorize after the first user:
    ```env
    DROPBOX_REDIRECT_URI=http://YOUR_LOCAL_IP:8080/oauth/callback
    ```
-
+   
    Get your local IP: `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux)
 
 4. **Restart the service**:
@@ -298,32 +411,6 @@ For Gmail:
    EMAIL_TO=recipient@example.com
    ```
 
-## 🚀 Production Deployment
-
-For deploying OCRBox on your own server with systemd, see the comprehensive [Deployment Guide](docs/DEPLOYMENT.md).
-
-### Quick Setup with SSH Tunnel (Private Server)
-
-Deploy on your server without exposing it publicly:
-
-```bash
-# On your server
-git clone https://github.com/stefanahman/ocrbox.git /opt/ocrbox
-cd /opt/ocrbox
-sudo ./deployment/install.sh
-```
-
-For Dropbox OAuth authorization (keeps server private):
-```bash
-# From your local machine
-ssh -L 8080:localhost:8080 user@yourserver.com
-
-# Then visit http://localhost:8080 in your browser
-# Complete OAuth flow, then disconnect tunnel
-```
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
-
 ## 🔧 Maintenance
 
 ### View Logs
@@ -383,7 +470,7 @@ docker-compose up -d
 
 ### Notifications not sending
 
-**Solution**:
+**Solution**: 
 - Verify credentials in `.env`
 - Check `docker-compose logs` for error messages
 - Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`
@@ -428,8 +515,8 @@ MIT License - see LICENSE file for details
 ## 💬 Support
 
 - 📖 [Documentation](docs/)
-- 🐛 [Issue Tracker](https://github.com/stefanahman/ocrbox/issues)
-- 💡 [Discussions](https://github.com/stefanahman/ocrbox/discussions)
+- 🐛 [Issue Tracker](https://github.com/yourusername/ocrbox/issues)
+- 💡 [Discussions](https://github.com/yourusername/ocrbox/discussions)
 
 ---
 
