@@ -44,6 +44,11 @@ class DropboxWatcher:
         # Track initialized accounts (to avoid re-creating folders)
         self.initialized_accounts = set()
 
+        # Cache tags.txt sync timestamps to avoid re-downloading on every file
+        # Key: account_id, Value: timestamp of last sync
+        self.tags_sync_cache: Dict[str, float] = {}
+        self.tags_cache_ttl = 300  # 5 minutes - reasonable for manual tag edits
+
         logger.info("Initialized Dropbox watcher")
 
     def get_dropbox_client(self, account_id: str) -> Optional[dropbox.Dropbox]:
@@ -475,37 +480,55 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
             logger.error(f"Error initializing folder structure: {e}")
             return False
 
-    def sync_tags_file(self, account_id: str) -> bool:
-        """Download tags.txt from Dropbox and save locally.
-        
+    def sync_tags_file(self, account_id: str, force: bool = False) -> bool:
+        """Download tags.txt from Dropbox and save locally (with caching).
+
+        Uses a 5-minute cache to avoid re-downloading tags.txt when processing
+        multiple files in quick succession (e.g., 50 photos at once).
+
         Args:
             account_id: Dropbox account ID
-            
+            force: If True, bypass cache and force sync
+
         Returns:
-            True if synced successfully
+            True if synced successfully (or used cache)
         """
+        import time
+
+        # Check cache unless forced
+        if not force:
+            last_sync = self.tags_sync_cache.get(account_id, 0)
+            time_since_sync = time.time() - last_sync
+
+            if time_since_sync < self.tags_cache_ttl:
+                logger.debug(f"Using cached tags.txt (synced {int(time_since_sync)}s ago)")
+                return True
+
         dbx = self.get_dropbox_client(account_id)
-        
+
         if not dbx:
             return False
-        
+
         try:
             # Download tags.txt from Dropbox App Folder root
             metadata, response = dbx.files_download('/tags.txt')
             tags_content = response.content.decode('utf-8')
-            
+
             # Save to local tags.txt (parent of Outbox directory)
             # This matches where TagManager looks for it
             from pathlib import Path
             local_outbox = Path(self.file_processor.outbox_dir)
             local_tags_file = local_outbox.parent / "tags.txt"
-            
+
             with open(local_tags_file, 'w', encoding='utf-8') as f:
                 f.write(tags_content)
-            
+
+            # Update cache timestamp
+            self.tags_sync_cache[account_id] = time.time()
+
             logger.info(f"Synced tags.txt from Dropbox for account: {account_id}")
             return True
-            
+
         except ApiError as e:
             error_str = str(e)
             if 'not_found' in error_str.lower():
@@ -513,44 +536,45 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
             else:
                 logger.warning(f"Error downloading tags.txt from Dropbox: {e}")
             return False
-        
+
         except Exception as e:
             logger.error(f"Error syncing tags.txt: {e}")
             return False
-    
+
     def process_account(self, account_id: str) -> int:
         """Process all new files for a single account.
-        
+
         Args:
             account_id: Dropbox account ID
-            
+
         Returns:
             Number of files processed
         """
         token_data = self.token_storage.load_token(account_id)
-        
+
         if not token_data:
             logger.warning(f"No token data for account: {account_id}")
             return 0
-        
+
         account_email = token_data.get("account_email", account_id)
-        
+
         # Initialize folder structure on first poll
         if account_id not in self.initialized_accounts:
             self.initialize_folder_structure(account_id)
-        
-        # Sync tags.txt from Dropbox on every poll (before listing files)
-        # This ensures tags are always up-to-date
-        self.sync_tags_file(account_id)
-        
+
         # List new files
         new_files = self.list_new_files(account_id)
-        
+
         if not new_files:
             return 0
-        
+
         logger.info(f"Found {len(new_files)} new file(s) for {account_email}")
-        
+
+        # Sync tags.txt from Dropbox before processing files
+        # Tags are re-read from disk on each file process, so we only need
+        # to sync when we actually have files to process
+        self.sync_tags_file(account_id)
+
         # Process each file
         processed_count = 0
         for file_metadata in new_files:
@@ -559,7 +583,7 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
                     processed_count += 1
             except Exception as e:
                 logger.error(f"Error processing file {file_metadata.name}: {e}")
-        
+
         return processed_count
 
     def poll_once(self) -> int:
