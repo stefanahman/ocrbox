@@ -475,35 +475,82 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
             logger.error(f"Error initializing folder structure: {e}")
             return False
 
-    def process_account(self, account_id: str) -> int:
-        """Process all new files for a single account.
-
+    def sync_tags_file(self, account_id: str) -> bool:
+        """Download tags.txt from Dropbox and save locally.
+        
         Args:
             account_id: Dropbox account ID
-
+            
+        Returns:
+            True if synced successfully
+        """
+        dbx = self.get_dropbox_client(account_id)
+        
+        if not dbx:
+            return False
+        
+        try:
+            # Download tags.txt from Dropbox App Folder root
+            metadata, response = dbx.files_download('/tags.txt')
+            tags_content = response.content.decode('utf-8')
+            
+            # Save to local tags.txt (parent of Outbox directory)
+            # This matches where TagManager looks for it
+            from pathlib import Path
+            local_outbox = Path(self.file_processor.outbox_dir)
+            local_tags_file = local_outbox.parent / "tags.txt"
+            
+            with open(local_tags_file, 'w', encoding='utf-8') as f:
+                f.write(tags_content)
+            
+            logger.info(f"Synced tags.txt from Dropbox for account: {account_id}")
+            return True
+            
+        except ApiError as e:
+            error_str = str(e)
+            if 'not_found' in error_str.lower():
+                logger.debug(f"tags.txt not found in Dropbox for account {account_id}")
+            else:
+                logger.warning(f"Error downloading tags.txt from Dropbox: {e}")
+            return False
+        
+        except Exception as e:
+            logger.error(f"Error syncing tags.txt: {e}")
+            return False
+    
+    def process_account(self, account_id: str) -> int:
+        """Process all new files for a single account.
+        
+        Args:
+            account_id: Dropbox account ID
+            
         Returns:
             Number of files processed
         """
         token_data = self.token_storage.load_token(account_id)
-
+        
         if not token_data:
             logger.warning(f"No token data for account: {account_id}")
             return 0
-
+        
         account_email = token_data.get("account_email", account_id)
-
+        
         # Initialize folder structure on first poll
         if account_id not in self.initialized_accounts:
             self.initialize_folder_structure(account_id)
-
+        
+        # Sync tags.txt from Dropbox on every poll (before listing files)
+        # This ensures tags are always up-to-date
+        self.sync_tags_file(account_id)
+        
         # List new files
         new_files = self.list_new_files(account_id)
-
+        
         if not new_files:
             return 0
-
+        
         logger.info(f"Found {len(new_files)} new file(s) for {account_email}")
-
+        
         # Process each file
         processed_count = 0
         for file_metadata in new_files:
@@ -512,7 +559,7 @@ Powered by OCRBox v2 - Self-Hosted OCR Service
                     processed_count += 1
             except Exception as e:
                 logger.error(f"Error processing file {file_metadata.name}: {e}")
-
+        
         return processed_count
 
     def poll_once(self) -> int:
