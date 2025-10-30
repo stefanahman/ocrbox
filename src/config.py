@@ -51,11 +51,11 @@ class Config:
 
     # v2 Tag Features
     enable_tags: bool
-    enable_auto_titles: bool
+    enable_auto_summaries: bool
     enable_tag_learning: bool
     primary_tag_confidence_threshold: int
     additional_tag_confidence_threshold: int
-    max_title_length: int
+    max_summary_length: int
     max_tags_per_file: int
     enable_detailed_logs: bool
 
@@ -161,11 +161,11 @@ class Config:
 
         # v2 Tag Features
         enable_tags = os.getenv("ENABLE_TAGS", "true").lower() == "true"
-        enable_auto_titles = os.getenv("ENABLE_AUTO_TITLES", "true").lower() == "true"
+        enable_auto_summaries = os.getenv("ENABLE_AUTO_SUMMARIES", "true").lower() == "true"
         enable_tag_learning = os.getenv("ENABLE_TAG_LEARNING", "true").lower() == "true"
         primary_tag_confidence_threshold = int(os.getenv("PRIMARY_TAG_CONFIDENCE_THRESHOLD", "80"))
         additional_tag_confidence_threshold = int(os.getenv("ADDITIONAL_TAG_CONFIDENCE_THRESHOLD", "70"))
-        max_title_length = int(os.getenv("MAX_TITLE_LENGTH", "30"))
+        max_summary_length = int(os.getenv("MAX_SUMMARY_LENGTH", "30"))
         max_tags_per_file = int(os.getenv("MAX_TAGS_PER_FILE", "5"))
         enable_detailed_logs = os.getenv("ENABLE_DETAILED_LOGS", "true").lower() == "true"
 
@@ -218,11 +218,11 @@ class Config:
             oauth_server_host=oauth_server_host,
             oauth_always_enabled=oauth_always_enabled,
             enable_tags=enable_tags,
-            enable_auto_titles=enable_auto_titles,
+            enable_auto_summaries=enable_auto_summaries,
             enable_tag_learning=enable_tag_learning,
             primary_tag_confidence_threshold=primary_tag_confidence_threshold,
             additional_tag_confidence_threshold=additional_tag_confidence_threshold,
-            max_title_length=max_title_length,
+            max_summary_length=max_summary_length,
             max_tags_per_file=max_tags_per_file,
             enable_detailed_logs=enable_detailed_logs,
             data_dir=data_dir,

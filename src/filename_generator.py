@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 class FilenameGenerator:
     """Generates sanitized filenames with tag prefixes."""
 
-    def __init__(self, max_title_length: int = 30, max_tags: int = 3):
+    def __init__(self, max_summary_length: int = 30, max_tags: int = 3):
         """Initialize filename generator.
 
         Args:
-            max_title_length: Maximum characters for title
+            max_summary_length: Maximum characters for summary
             max_tags: Maximum number of tags per filename
         """
-        self.max_title_length = max_title_length
+        self.max_summary_length = max_summary_length
         self.max_tags = max_tags
 
     @staticmethod
@@ -66,64 +66,64 @@ class FilenameGenerator:
 
         return tag
 
-    def sanitize_title(self, title: str) -> str:
-        """Sanitize a title for use in filename.
+    def sanitize_summary(self, summary: str) -> str:
+        """Sanitize a summary for use in filename.
 
-        Converts UTF-8 titles to filesystem-safe ASCII.
+        Converts UTF-8 summaries to filesystem-safe ASCII.
 
         Args:
-            title: Raw title string (may contain accents, special chars)
+            summary: Raw summary string (may contain accents, special chars)
 
         Returns:
-            Sanitized title (lowercase, hyphens, alphanumeric, max length)
+            Sanitized summary (lowercase, hyphens, alphanumeric, max length)
         """
         # Strip whitespace
-        title = title.strip()
+        summary = summary.strip()
 
         # Replace spaces and underscores with hyphens
-        title = re.sub(r'[\s_]+', '-', title)
+        summary = re.sub(r'[\s_]+', '-', summary)
 
         # Normalize unicode characters (decompose accents)
-        title = unicodedata.normalize('NFD', title)
+        summary = unicodedata.normalize('NFD', summary)
 
         # Remove accent marks (keep only ASCII)
-        title = title.encode('ascii', 'ignore').decode('ascii')
+        summary = summary.encode('ascii', 'ignore').decode('ascii')
 
         # Lowercase
-        title = title.lower()
+        summary = summary.lower()
 
         # Keep only alphanumeric and hyphens
-        title = re.sub(r'[^a-z0-9-]', '', title)
+        summary = re.sub(r'[^a-z0-9-]', '', summary)
 
         # Remove consecutive hyphens
-        title = re.sub(r'-+', '-', title)
+        summary = re.sub(r'-+', '-', summary)
 
         # Remove leading/trailing hyphens
-        title = title.strip('-')
+        summary = summary.strip('-')
 
         # Truncate to max length
-        if len(title) > self.max_title_length:
-            title = title[:self.max_title_length].rstrip('-')
+        if len(summary) > self.max_summary_length:
+            summary = summary[:self.max_summary_length].rstrip('-')
 
         # Ensure minimum length
-        if len(title) < 5:
-            title = "untitled"
+        if len(summary) < 5:
+            summary = "untitled"
 
-        return title
+        return summary
 
     def generate_filename(
         self,
         tags: List[str],
-        title: str,
+        summary: str,
         output_dir: Optional[str] = None
     ) -> str:
-        """Generate filename with tags and title.
+        """Generate filename with tags and summary.
 
-        Format: [tag1][tag2][tag3]_title.txt
+        Format: [tag1][tag2][tag3]_summary.txt
 
         Args:
             tags: List of tags (first is primary)
-            title: Document title
+            summary: Document summary
             output_dir: Optional directory to check for uniqueness
 
         Returns:
@@ -140,14 +140,14 @@ class FilenameGenerator:
         if not sanitized_tags:
             sanitized_tags = ['uncategorized']
 
-        # Sanitize title
-        clean_title = self.sanitize_title(title)
+        # Sanitize summary
+        clean_summary = self.sanitize_summary(summary)
 
         # Build tag prefix: [tag1][tag2][tag3]
         tag_prefix = ''.join(f'[{tag}]' for tag in sanitized_tags)
 
         # Build base filename
-        base_filename = f"{tag_prefix}_{clean_title}.txt"
+        base_filename = f"{tag_prefix}_{clean_summary}.txt"
 
         # Check for uniqueness if output_dir provided
         if output_dir:
@@ -175,8 +175,8 @@ class FilenameGenerator:
         if not (output_path / filename).exists():
             return filename
 
-        # Extract parts: tags + title + extension
-        # Pattern: [tag1][tag2]_title.txt
+        # Extract parts: tags + summary + extension
+        # Pattern: [tag1][tag2]_summary.txt
         match = re.match(r'((?:\[[^\]]+\])+)_([^\.]+)\.txt$', filename)
 
         if not match:
@@ -184,16 +184,16 @@ class FilenameGenerator:
             stem = filename.rsplit('.', 1)[0]
             ext = '.txt'
             tag_prefix = ''
-            title = stem
+            summary = stem
         else:
             tag_prefix = match.group(1)
-            title = match.group(2)
+            summary = match.group(2)
             ext = '.txt'
 
         # Try adding counter
         counter = 1
         while True:
-            new_filename = f"{tag_prefix}_{title}-{counter}{ext}"
+            new_filename = f"{tag_prefix}_{summary}-{counter}{ext}"
             if not (output_path / new_filename).exists():
                 logger.debug(f"Filename collision, using: {new_filename}")
                 return new_filename
@@ -204,7 +204,7 @@ class FilenameGenerator:
                 logger.error("Too many filename collisions, using timestamp")
                 from datetime import datetime
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                return f"{tag_prefix}_{title}-{timestamp}{ext}"
+                return f"{tag_prefix}_{summary}-{timestamp}{ext}"
 
     @staticmethod
     def extract_tags_from_filename(filename: str) -> List[str]:
@@ -222,16 +222,16 @@ class FilenameGenerator:
         return tags
 
     @staticmethod
-    def extract_title_from_filename(filename: str) -> Optional[str]:
-        """Extract title from a filename.
+    def extract_summary_from_filename(filename: str) -> Optional[str]:
+        """Extract summary from a filename.
 
         Args:
             filename: Filename to parse
 
         Returns:
-            Extracted title or None
+            Extracted summary or None
         """
-        # Pattern: [tags...]_title.txt
+        # Pattern: [tags...]_summary.txt
         match = re.match(r'(?:\[[^\]]+\])+_([^\.]+)\.txt$', filename)
         if match:
             return match.group(1)

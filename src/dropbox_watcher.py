@@ -246,24 +246,24 @@ class DropboxWatcher:
         input_filename: str
     ) -> bool:
         """Upload log files for a processed file to Dropbox /Logs/ folder.
-        
+
         Args:
             dbx: Dropbox client
             input_filename: Original input file name (to find corresponding logs)
-            
+
         Returns:
             True if at least one log was uploaded successfully
         """
         try:
             from pathlib import Path
             from datetime import datetime
-            
+
             # Get the base name without extension for log matching
             base_name = Path(input_filename).stem
-            
+
             # Generate timestamp for unique log filenames (allows reprocessing history)
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            
+
             # Find all log files for this input file
             logs_dir = Path(self.file_processor.log_writer.logs_dir)
             log_patterns = [
@@ -271,17 +271,17 @@ class DropboxWatcher:
                 f"{base_name}_processing.json",
                 f"{base_name}_error.json"
             ]
-            
+
             uploaded_count = 0
             for log_filename in log_patterns:
                 log_path = logs_dir / log_filename
-                
+
                 if log_path.exists():
                     try:
                         # Read log file
                         with open(log_path, 'r', encoding='utf-8') as f:
                             log_content = f.read()
-                        
+
                         # Add timestamp to Dropbox filename to preserve reprocessing history
                         # Example: photo_llm_response.json -> photo_20251029_204530_llm_response.json
                         dropbox_filename = log_filename.replace(
@@ -289,19 +289,19 @@ class DropboxWatcher:
                             f"{base_name}_{timestamp}_"
                         )
                         dropbox_path = f"/Logs/{dropbox_filename}"
-                        
+
                         dbx.files_upload(
                             log_content.encode('utf-8'),
                             dropbox_path,
                             mode=dropbox.files.WriteMode.add  # Don't overwrite, create new
                         )
-                        
+
                         logger.debug(f"Uploaded log to Dropbox: {dropbox_path}")
                         uploaded_count += 1
-                        
+
                     except Exception as e:
                         logger.warning(f"Could not upload log {log_filename}: {e}")
-            
+
             if uploaded_count > 0:
                 logger.info(f"Uploaded {uploaded_count} log file(s) to Dropbox for {input_filename}")
                 return True
@@ -434,7 +434,7 @@ This is your OCRBox App Folder. Here's how it works:
 📸 **Usage:**
 1. Upload an image (PNG, JPG, GIF, WebP, BMP, TIFF) to /Inbox/
 2. OCRBox automatically extracts text and categorizes it
-3. Find the text file in /Outbox/ with format: [tag1][tag2]_title.txt
+3. Find the text file in /Outbox/ with format: [tag1][tag2]_summary.txt
 4. Original image moves to /Archive/
 
 🏷️ **Tags:**

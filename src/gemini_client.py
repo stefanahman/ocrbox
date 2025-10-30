@@ -52,7 +52,7 @@ class GeminiOCRClient:
         available_tags: List[str],
         filename: str = "image"
     ) -> Dict[str, Any]:
-        """Extract text with structured output (tags, title, confidence).
+        """Extract text with structured output (tags, summary, confidence).
 
         Args:
             image_data: Image bytes
@@ -60,7 +60,7 @@ class GeminiOCRClient:
             filename: Original filename (for logging)
 
         Returns:
-            Dictionary with text, title, and tags array
+            Dictionary with text, summary, and tags array
 
         Raises:
             Exception: If OCR fails after all retries
@@ -76,22 +76,40 @@ class GeminiOCRClient:
                 # Build prompt with available tags
                 tags_str = ", ".join(available_tags)
 
-                prompt = f"""Extract all text from this image and analyze its content.
+                prompt = f"""Extract text from this image and analyze its content. Focus ONLY on the MAIN SUBJECT/ACTOR of the image.
 
-CRITICAL: Only extract text that is actually visible in the image. Do NOT add any explanatory text, commentary, or text that is not present in the image.
+MAIN ACTOR FOCUS:
+Focus on extracting text from the PRIMARY SUBJECT of the image. Ignore:
+- Background elements, UI chrome, browser toolbars, app navigation
+- Decorative text, watermarks, timestamps
+- Surrounding interface elements not part of the main content
+
+Examples of MAIN ACTORS to focus on:
+- Receipt: Extract only the receipt details (items, prices, totals, store name, date) - ignore surrounding counter, hands, or background
+- Instagram screenshot: Extract only the post caption and comments INSIDE the post - ignore app UI, buttons, navigation bars
+- Business card: Extract only the card's printed text - ignore background surface
+- Menu: Extract only menu items, descriptions, and prices - ignore table, place settings, or surroundings
+- Invoice/Bill: Extract only the document text - ignore email headers or forwarding information
+- Handwritten note: Extract only the note's content - ignore notebook edges, desk surface
+- Product label: Extract only the label text - ignore packaging or shelf
+- Sign/Poster: Extract only the sign's text - ignore wall, frame, or mounting
+- Letter/Document: Extract only the document content - ignore envelope, folder, or desk
+- Whiteboard/Presentation slide: Extract only the written/projected content - ignore frame, projector edges
+
+CRITICAL: Only extract text that is actually visible in the main subject. Do NOT add explanatory text, commentary, or text not present.
 
 Return a JSON response with:
 
-1. "text": The EXACT text from the image, formatted in markdown:
+1. "text": The EXACT text from the main subject, formatted in markdown:
    - Use ## for section headers (only if headers exist in image)
    - Use * or - for bullet lists (only if lists exist in image)
    - Use 1. 2. 3. for numbered lists (only if numbered lists exist in image)
    - Create logical paragraph breaks where appropriate
    - Do NOT preserve visual layout or column spacing
    - Do NOT add any introductory text like "Here is the text:" or similar
-   - ONLY include text that is actually visible in the image
+   - ONLY include text from the main subject/actor
 
-2. "title": A brief, descriptive title (5-30 characters) that summarizes the content
+2. "summary": A brief, descriptive summary (5-30 characters) that captures the essence of the content
 
 3. "tags": Select the 2-5 most appropriate tags from this list: [{tags_str}]
 
@@ -117,7 +135,7 @@ Return a JSON response with:
    - Preserve accents and UTF-8 characters in tag names
    - If no tag meets primary threshold, use "uncategorized" as primary
 
-If no text is found, return {{"text": "No text detected", "title": "Empty", "tags": [{{"name": "uncategorized", "confidence": 100, "primary": true}}]}}
+If no text is found, return {{"text": "No text detected", "summary": "Empty", "tags": [{{"name": "uncategorized", "confidence": 100, "primary": true}}]}}
 
 Return ONLY valid JSON, no other text."""
 
@@ -127,6 +145,25 @@ Return ONLY valid JSON, no other text."""
                     [prompt, image],
                     safety_settings=self.safety_settings
                 )
+
+                # Log token usage if available
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                    usage = response.usage_metadata
+                    prompt_tokens = getattr(usage, 'prompt_token_count', 0)
+                    candidate_tokens = getattr(usage, 'candidates_token_count', 0)
+                    total_tokens = getattr(usage, 'total_token_count', 0)
+
+                    # Gemini 1.5 Flash context window: 1,048,576 tokens
+                    # Gemini 1.5 Pro context window: 2,097,152 tokens
+                    context_window = 1048576 if '1.5-flash' in self.model_name else 2097152
+                    remaining_tokens = context_window - total_tokens
+                    usage_percent = (total_tokens / context_window) * 100
+
+                    logger.info(
+                        f"Token usage for {filename}: "
+                        f"prompt={prompt_tokens}, response={candidate_tokens}, total={total_tokens} "
+                        f"({usage_percent:.2f}% of context window, {remaining_tokens:,} tokens remaining)"
+                    )
 
                 # Extract and parse JSON from response
                 if response.text:
@@ -182,7 +219,7 @@ Return ONLY valid JSON, no other text."""
             data = json.loads(json_str)
 
             # Validate required fields
-            if "text" not in data or "title" not in data or "tags" not in data:
+            if "text" not in data or "summary" not in data or "tags" not in data:
                 logger.warning("Missing required fields in response, using fallback")
                 return self._fallback_response(data.get("text", ""))
 
@@ -233,7 +270,7 @@ Return ONLY valid JSON, no other text."""
         """
         return {
             "text": text,
-            "title": "Untitled",
+            "summary": "Untitled",
             "tags": [{"name": "uncategorized", "confidence": 100, "primary": True}]
         }
 
