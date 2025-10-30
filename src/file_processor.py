@@ -14,6 +14,7 @@ from .notifications import NotificationManager
 from .tag_manager import TagManager
 from .filename_generator import FilenameGenerator
 from .log_writer import LogWriter
+from .output_formatter import OutputFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class FileProcessor:
         self.archive_dir = Path(config.archive_dir)
         self.primary_tag_threshold = config.primary_tag_confidence_threshold
         self.additional_tag_threshold = config.additional_tag_confidence_threshold
+        self.output_format = config.output_format
 
         # Ensure directories exist
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
@@ -130,25 +132,35 @@ class FileProcessor:
             # 4. Filter tags by confidence thresholds
             filtered_tags = self._filter_tags_by_confidence(tags_data)
 
-            # 5. Generate output filename
+            # 5. Format output based on configured format
             tag_names = [tag["name"] for tag in filtered_tags]
-            output_filename = self.filename_generator.generate_filename(
+            formatted_content, file_extension = OutputFormatter.format_output(
+                text=text,
+                summary=summary,
+                tags=filtered_tags,
+                format_type=self.output_format
+            )
+
+            # 6. Generate output filename based on format
+            output_filename = self.filename_generator.generate_filename_with_format(
                 tags=tag_names,
                 summary=summary,
+                format_type=self.output_format,
+                file_extension=file_extension,
                 output_dir=str(self.outbox_dir)
             )
 
-            # 6. Save text file
+            # 7. Save formatted file
             output_path = self.outbox_dir / output_filename
             with open(output_path, "w", encoding="utf-8") as f:
-                f.write(text)
+                f.write(formatted_content)
 
-            logger.info(f"Saved text to: {output_path}")
+            logger.info(f"Saved {self.output_format} output to: {output_path}")
 
-            # 7. Calculate processing duration
+            # 8. Calculate processing duration
             duration_ms = int((time.time() - start_time) * 1000)
 
-            # 8. Write processing log
+            # 9. Write processing log
             confidence_scores = [tag["confidence"] for tag in filtered_tags]
             self.log_writer.write_processing_log(
                 input_filename=filename,

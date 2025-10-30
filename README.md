@@ -222,13 +222,14 @@ For production multi-user deployment:
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `ENABLE_TAGS` | Enable automatic tagging | `true` | No |
-| `ENABLE_AUTO_TITLES` | Generate descriptive titles | `true` | No |
+| `ENABLE_AUTO_SUMMARIES` | Generate descriptive summaries | `true` | No |
 | `ENABLE_TAG_LEARNING` | Learn tags from filenames | `true` | No |
 | `PRIMARY_TAG_CONFIDENCE_THRESHOLD` | Min confidence for primary tag (0-100) | `80` | No |
 | `ADDITIONAL_TAG_CONFIDENCE_THRESHOLD` | Min confidence for additional tags (0-100) | `70` | No |
-| `MAX_TITLE_LENGTH` | Max characters for titles | `30` | No |
+| `MAX_SUMMARY_LENGTH` | Max characters for summaries | `30` | No |
 | `MAX_TAGS_PER_FILE` | Max tags per file (1-5) | `5` | No |
 | `ENABLE_DETAILED_LOGS` | Write detailed logs to /Logs/ | `true` | No |
+| `OUTPUT_FORMAT` | Output format (`plaintext` or `obsidian`) | `plaintext` | No |
 
 ### OAuth Server Configuration
 
@@ -279,15 +280,65 @@ The system will automatically add `groceries` and `shopping` to available tags.
 
 ### Output Filename Format
 
+The filename format depends on the `OUTPUT_FORMAT` setting:
+
+#### Plain Text Format (default)
 Files are named with tags first for easy sorting:
 ```
-[primary-tag][tag2][tag3]_descriptive-title.txt
+[primary-tag][tag2][tag3]_descriptive-summary.txt
 ```
 
 Examples:
 - `[receipts]_starbucks-coffee.txt`
 - `[receipts][shopping]_grocery-bill.txt`
 - `[work][documents]_meeting-notes.txt`
+
+#### Obsidian Format
+When `OUTPUT_FORMAT=obsidian`, files are saved as markdown with YAML frontmatter:
+```
+YYYY-MM-DD-HHMMSS_descriptive-summary.md
+```
+
+The frontmatter includes:
+- `summary`: Brief description of the content
+- `tags`: Array with `#ocrbox` prepended, plus all extracted tags
+- `confidence`: Tag confidence scores (0-100)
+- `created`: ISO timestamp
+
+Example filename:
+- `2025-10-30-143045_grocery-bill.md`
+
+Example Obsidian file content:
+```markdown
+---
+summary: "Grocery receipt from Whole Foods"
+tags:
+  - ocrbox
+  - receipts
+  - shopping
+confidence:
+  receipts: 95
+  shopping: 88
+created: 2025-10-30T14:30:45.123456
+---
+
+## Whole Foods Market
+
+Date: October 30, 2025
+
+* Organic Bananas - $3.99
+* Almond Milk - $4.50
+* Whole Grain Bread - $5.99
+
+**Total: $14.48**
+```
+
+**Why Obsidian format?**
+- Tags in frontmatter for powerful Obsidian queries
+- Date-based filenames for chronological organization
+- Full markdown support with the original OCR formatting
+- Easy to find all OCRBox files with `#ocrbox` tag
+- Confidence scores available for filtering/analysis
 
 ### Confidence Scores
 

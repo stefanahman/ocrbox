@@ -5,6 +5,7 @@ import re
 import unicodedata
 from pathlib import Path
 from typing import List, Optional
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,44 @@ class FilenameGenerator:
             filename = base_filename
 
         logger.debug(f"Generated filename: {filename}")
+        return filename
+
+    def generate_filename_with_format(
+        self,
+        tags: List[str],
+        summary: str,
+        format_type: str,
+        file_extension: str,
+        output_dir: Optional[str] = None
+    ) -> str:
+        """Generate filename based on format type.
+
+        Args:
+            tags: List of tags (first is primary)
+            summary: Document summary
+            format_type: Format type ("plaintext" or "obsidian")
+            file_extension: File extension (e.g., ".txt", ".md")
+            output_dir: Optional directory to check for uniqueness
+
+        Returns:
+            Generated filename with appropriate format
+        """
+        if format_type == "obsidian":
+            # Obsidian format: YYYY-MM-DD-HHMMSS_summary.md
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            clean_summary = self.sanitize_summary(summary)
+            base_filename = f"{timestamp}_{clean_summary}{file_extension}"
+
+            # Ensure uniqueness (unlikely with seconds, but safety check)
+            if output_dir:
+                filename = self._ensure_unique_filename(base_filename, output_dir)
+            else:
+                filename = base_filename
+        else:
+            # Plaintext format: [tag1][tag2]_summary.txt
+            filename = self.generate_filename(tags, summary, output_dir)
+
+        logger.debug(f"Generated {format_type} filename: {filename}")
         return filename
 
     @staticmethod

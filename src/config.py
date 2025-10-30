@@ -59,6 +59,9 @@ class Config:
     max_tags_per_file: int
     enable_detailed_logs: bool
 
+    # Output Format
+    output_format: str  # "plaintext" or "obsidian"
+
     # Paths
     data_dir: str
     tokens_dir: str
@@ -169,6 +172,12 @@ class Config:
         max_tags_per_file = int(os.getenv("MAX_TAGS_PER_FILE", "5"))
         enable_detailed_logs = os.getenv("ENABLE_DETAILED_LOGS", "true").lower() == "true"
 
+        # Output Format
+        output_format = os.getenv("OUTPUT_FORMAT", "plaintext").lower()
+        if output_format not in ["plaintext", "obsidian"]:
+            logger.warning(f"Invalid OUTPUT_FORMAT '{output_format}', defaulting to 'plaintext'")
+            output_format = "plaintext"
+
         # Paths
         data_dir = os.getenv("DATA_DIR", "/app/data")
         tokens_dir = os.path.join(data_dir, "tokens")
@@ -225,6 +234,7 @@ class Config:
             max_summary_length=max_summary_length,
             max_tags_per_file=max_tags_per_file,
             enable_detailed_logs=enable_detailed_logs,
+            output_format=output_format,
             data_dir=data_dir,
             tokens_dir=tokens_dir,
             output_dir=output_dir,
