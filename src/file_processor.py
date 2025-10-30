@@ -191,7 +191,7 @@ class FileProcessor:
                 account=account_email or account_id
             )
 
-            return True, text, output_filename
+            return True, formatted_content, output_filename
 
         except Exception as e:
             error_msg = str(e)
